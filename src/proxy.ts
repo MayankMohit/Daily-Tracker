@@ -12,17 +12,20 @@
 // caused the sign-in reload loop, because the session cookie set on the portal
 // domain couldn't be verified back on the app domain.
 
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
-// Public routes that don't require authentication.
-const isPublicRoute = createRouteMatcher([
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/__clerk(.*)",
-]);
+// Public routes that don't require authentication. Matched by hand rather than
+// via Clerk's `createRouteMatcher` helper, which is deprecated in favour of
+// resource-based checks — but we keep protection at the proxy so it runs before
+// any page renders (avoiding a race with the sign-in handshake).
+const PUBLIC_PREFIXES = ["/sign-in", "/sign-up", "/__clerk"];
+const isPublicRoute = (pathname: string) =>
+  PUBLIC_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
 
 export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) {
+  if (!isPublicRoute(req.nextUrl.pathname)) {
     await auth.protect({
       unauthenticatedUrl: new URL("/sign-in", req.url).toString(),
     });
