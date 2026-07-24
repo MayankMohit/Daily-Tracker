@@ -1,26 +1,46 @@
 import { EmptyState } from "@/components/ui";
 import { NewTaskButton } from "@/components/new-task-button";
 import { TaskTable } from "@/components/task-table";
+import { MonthNav } from "@/components/month-nav";
 import { AiQuickAdd } from "@/components/ai/ai-quick-add";
 import { aiConfigured } from "@/lib/services/ai";
 import { listTasks } from "@/lib/services/tasks";
 import { getLogsInRange } from "@/lib/services/logs";
-import { getExtraActivities } from "@/lib/services/daily";
-import { monthDays, todayKey } from "@/lib/date";
+import {
+  getExtraActivities,
+  getExtraActivitiesInRange,
+} from "@/lib/services/daily";
+import { monthDays, monthKey, monthKeyToDate, todayKey } from "@/lib/date";
 
 // Always render fresh — the file store changes as the user logs values.
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string | string[] }>;
+}) {
   const today = todayKey();
-  const dates = monthDays();
+  const currentMonth = monthKey();
+
+  // Which month is being viewed (`?month=YYYY-MM`). Default to — and never page
+  // beyond — the current month, since there's no future data to show.
+  const { month } = await searchParams;
+  const requested = Array.isArray(month) ? month[0] : month;
+  let viewMonth =
+    (requested && monthKeyToDate(requested) && requested) || currentMonth;
+  if (viewMonth > currentMonth) viewMonth = currentMonth;
+  const isCurrentMonth = viewMonth === currentMonth;
+
+  const dates = monthDays(monthKeyToDate(viewMonth)!);
   const from = dates[0];
   const to = dates[dates.length - 1];
 
-  const [tasks, logs, extras] = await Promise.all([
+  const [tasks, logs, extras, monthExtras] = await Promise.all([
     listTasks(),
     getLogsInRange(from, to),
     getExtraActivities(today),
+    getExtraActivitiesInRange(from, to),
   ]);
 
   const categories = Array.from(
@@ -47,13 +67,20 @@ export default async function DashboardPage() {
           action={<NewTaskButton categories={categories} />}
         />
       ) : (
+        // Remount on month change so the table re-seeds its log/extras state
+        // from the new month's props (useState initializers run once).
         <TaskTable
+          key={viewMonth}
           tasks={tasks}
           dates={dates}
           initialLogs={logs}
-          initialExtras={extras}
+          // Today's cell/extras only make sense on the current month; past
+          // months are read-only history.
+          initialExtras={isCurrentMonth ? extras : []}
+          monthExtras={monthExtras}
           categories={categories}
-          today={today}
+          today={isCurrentMonth ? today : undefined}
+          monthNav={<MonthNav viewMonth={viewMonth} isCurrent={isCurrentMonth} />}
         />
       )}
     </div>

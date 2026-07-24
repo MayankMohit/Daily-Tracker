@@ -85,11 +85,15 @@ async function dailyContext(userId: string, date: DayKey): Promise<string> {
 
 async function weeklyContext(userId: string): Promise<string> {
   const days = 7;
-  const [completion, moods, categories] = await Promise.all([
+  const dates = lastNDays(days);
+  const [completion, moods, categories, tasks, logs] = await Promise.all([
     getDailyCompletion(days, userId),
     getMoodSeries(days, userId),
     getCategoryBreakdown(days, userId),
+    listTasks(userId),
+    getLogsInRange(dates[0], dates[dates.length - 1], userId),
   ]);
+  const idx = indexLogs(logs);
 
   const moodByDate = new Map(moods.map((m) => [m.date, m.mood]));
   const rows = completion
@@ -102,6 +106,28 @@ async function weeklyContext(userId: string): Promise<string> {
     })
     .join("\n");
 
+  // Per-task weekly rollup so the summary can name specifics (how often each
+  // habit was hit, and the average for measurable ones).
+  const taskLines = tasks
+    .map((t) => {
+      const applicableDays = dates.filter((d) => taskAppliesOn(t, d));
+      if (applicableDays.length === 0) return null;
+      if (t.type === "boolean") {
+        const done = applicableDays.filter(
+          (d) => idx.get(logKey(t._id, d))?.value.boolStatus,
+        ).length;
+        return `- ${t.title}: ${done}/${applicableDays.length} days`;
+      }
+      const pcts = applicableDays.map(
+        (d) => idx.get(logKey(t._id, d))?.value.percentage ?? 0,
+      );
+      const avg = Math.round(pcts.reduce((s, p) => s + p, 0) / pcts.length);
+      const logged = pcts.filter((p) => p > 0).length;
+      return `- ${t.title}: avg ${avg}% over ${applicableDays.length} scheduled days (${logged} logged)`;
+    })
+    .filter(Boolean)
+    .join("\n");
+
   const catLine = categories
     .slice(0, 5)
     .map((c) => `${c.category} (${c.count})`)
@@ -110,6 +136,7 @@ async function weeklyContext(userId: string): Promise<string> {
   return [
     "Last 7 days:",
     rows,
+    taskLines ? `Per-task this week:\n${taskLines}` : "",
     catLine ? `Most active categories: ${catLine}` : "",
   ]
     .filter(Boolean)
@@ -139,14 +166,20 @@ export async function generateSummary(
       ? await dailyContext(userId, date)
       : await weeklyContext(userId);
 
+  const period = type === "daily" ? "day" : "week";
   const system =
     `You are a personal productivity coach embedded in a daily task tracker. ` +
-    `${tone} Base everything ONLY on the data provided — never invent tasks or numbers. ` +
-    `Keep the summary to 2-4 sentences. Give 2-3 short, specific, actionable recommendations.`;
+    `${tone} Base everything ONLY on the data provided — never invent tasks, numbers, or events. ` +
+    `Write a detailed ${type} reflection of two short paragraphs (roughly 5–8 sentences total). ` +
+    `Open with how the ${period} went overall, then get specific: name the tasks that were completed ` +
+    `or missed, cite the actual quantities and percentages, call out streaks or trends, and connect to ` +
+    `mood or journal notes when they're present. Then give 3–5 specific, actionable recommendations — ` +
+    `each a full sentence that says what to do next and why it helps.`;
 
   const prompt =
     `Write a ${type} reflection for the user based on this data:\n\n${context}\n\n` +
-    `Respond as JSON with "summary" (string) and "recommendations" (array of strings).`;
+    `Respond as JSON with "summary" (a detailed multi-sentence string in plain prose — no markdown ` +
+    `headings or bullet points) and "recommendations" (an array of 3–5 specific action strings).`;
 
   await reserveCall(userId, `summary:${type}`);
 
@@ -172,7 +205,7 @@ export async function generateSummary(
     type,
     date,
     summary: result.summary.trim(),
-    recommendations: (result.recommendations ?? []).slice(0, 4),
+    recommendations: (result.recommendations ?? []).slice(0, 6),
   };
 
   await db.aiInsights.upsert((c) => c._id === id, () => insight, insight);

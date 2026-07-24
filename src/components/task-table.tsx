@@ -4,7 +4,7 @@
 // first column + header. Cells switch on task type — checkbox (boolean),
 // quantity input vs a target (quantity %), or a 0–100 input (direct %).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ExtraActivity, Task, TaskLog, TaskLogValue } from "@/lib/types";
 import { api } from "@/lib/client";
@@ -20,21 +20,29 @@ import {
 } from "@/lib/date";
 import { cn } from "@/lib/cn";
 import { TaskRowMenu } from "./task-row-menu";
+import { MonthlyTrendChart, type TrendPoint } from "./charts/monthly-trend-chart";
 
 export function TaskTable({
   tasks,
   dates,
   initialLogs,
   initialExtras = [],
+  monthExtras = [],
   categories: categoryList = [],
   today,
+  monthNav,
 }: {
   tasks: Task[];
   dates: DayKey[];
   initialLogs: TaskLog[];
   initialExtras?: ExtraActivity[];
+  /** All of the month's extra activities, for the chart's per-day hover. The
+   *  table itself still only shows today's (via `initialExtras`). */
+  monthExtras?: ExtraActivity[];
   categories?: string[];
   today?: DayKey;
+  /** Month pager, rendered inline in the "Task" header cell. */
+  monthNav?: ReactNode;
 }) {
   const router = useRouter();
   // Distinct existing category names, offered as suggestions in the edit form.
@@ -173,26 +181,58 @@ export function TaskTable({
   const tableRef = useRef<HTMLTableElement>(null);
   const todayCellRef = useRef<HTMLTableCellElement>(null);
   const taskRowsEndRef = useRef<HTMLTableRowElement>(null);
+  // One ref per date header cell, so the monthly chart below can align each of
+  // its points to the exact centre of that day's column at any width.
+  const dateCellRefs = useRef<(HTMLTableCellElement | null)[]>([]);
   const [todayBox, setTodayBox] = useState<{
     left: number;
     width: number;
     height: number;
   } | null>(null);
+  // Geometry the trend chart needs, measured from the live table: total width
+  // (chart matches it) plus each column centre and the plot's left/right bounds.
+  const [chartGeom, setChartGeom] = useState<{
+    width: number;
+    plotLeft: number;
+    plotRight: number;
+    centers: number[];
+  } | null>(null);
   useEffect(() => {
     const measure = () => {
       const table = tableRef.current;
-      const cell = todayCellRef.current;
-      if (!table || !cell) {
+      if (!table) {
         setTodayBox(null);
+        setChartGeom(null);
         return;
       }
       const t = table.getBoundingClientRect();
-      const c = cell.getBoundingClientRect();
-      const endRow = taskRowsEndRef.current;
-      const height = endRow
-        ? endRow.getBoundingClientRect().bottom - t.top
-        : t.height;
-      setTodayBox({ left: c.left - t.left, width: c.width, height });
+
+      const cell = todayCellRef.current;
+      if (cell) {
+        const c = cell.getBoundingClientRect();
+        const endRow = taskRowsEndRef.current;
+        const height = endRow
+          ? endRow.getBoundingClientRect().bottom - t.top
+          : t.height;
+        setTodayBox({ left: c.left - t.left, width: c.width, height });
+      } else {
+        setTodayBox(null);
+      }
+
+      const rects = dateCellRefs.current.map(
+        (el) => el?.getBoundingClientRect() ?? null,
+      );
+      const centers = rects.map((r) => (r ? r.left - t.left + r.width / 2 : 0));
+      const first = rects.find((r): r is DOMRect => r !== null);
+      const last = [...rects]
+        .reverse()
+        .find((r): r is DOMRect => r !== null);
+      setChartGeom({
+        width: t.width,
+        plotLeft: first ? first.left - t.left : 0,
+        plotRight: last ? last.right - t.left : t.width,
+        centers,
+      });
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -237,6 +277,72 @@ export function TaskTable({
     [logs],
   );
 
+  // Extra activities grouped by day for the chart hover. Past days come from the
+  // server-loaded month; today's are taken from live state so adds/removes show
+  // up immediately.
+  const extrasByDate = useMemo(() => {
+    const m = new Map<string, ExtraActivity[]>();
+    for (const e of monthExtras) {
+      if (e.date === today) continue; // today handled from live state below
+      const list = m.get(e.date);
+      if (list) list.push(e);
+      else m.set(e.date, [e]);
+    }
+    if (today && extras.length) m.set(today, extras);
+    return m;
+  }, [monthExtras, extras, today]);
+
+  // Per-day data for the trend chart: the overall completion (average of each
+  // applicable task's contribution — boolean 0/1, percentage capped %/100) plus
+  // a per-task breakdown and that day's extra activities, for the hover tooltip.
+  // Recomputes live as today's cells are edited. Days with no tasks — or still
+  // in the future — get a null value so the line skips them rather than dropping
+  // to 0%.
+  const trendPoints = useMemo<TrendPoint[]>(
+    () =>
+      dates.map((d, i) => {
+        const future = today ? d > today : false;
+        const applicable = future
+          ? []
+          : order.filter((t) => taskAppliesOn(t, d));
+        const dayExtras = future ? [] : extrasByDate.get(d) ?? [];
+        let value: number | null = null;
+        let detail: TrendPoint["detail"] = null;
+        if (applicable.length > 0 || dayExtras.length > 0) {
+          let sum = 0;
+          let completed = 0;
+          const items = applicable.map((t) => {
+            const v = logs.get(logKey(t._id, d));
+            const c = contributionOf(t, v);
+            sum += c;
+            if (c >= 1) completed++;
+            return { title: t.title, color: t.color, text: cellText(t, v), done: c >= 1 };
+          });
+          if (applicable.length > 0) value = (sum / applicable.length) * 100;
+          detail = {
+            completion: value ?? 0,
+            applicable: applicable.length,
+            completed,
+            items,
+            extras: dayExtras.map((e) => ({
+              description: e.description,
+              category: e.category,
+              duration: e.estimatedDuration,
+            })),
+          };
+        }
+        return {
+          x: chartGeom?.centers[i] ?? 0,
+          value,
+          label: monthDayLabel(d),
+          weekday: weekdayLabel(d),
+          future,
+          detail,
+        };
+      }),
+    [dates, order, logs, today, chartGeom, extrasByDate],
+  );
+
   if (tasks.length === 0) return null;
 
   return (
@@ -268,8 +374,11 @@ export function TaskTable({
         </colgroup>
         <thead>
           <tr className="border-b border-border">
-            <th className="sticky left-0 z-20 border-r border-border bg-surface px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted">
-              Task
+            <th className="sticky left-0 z-20 border-r border-border bg-surface px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
+              <div className="flex items-center justify-between gap-2">
+                <span>Task</span>
+                {monthNav}
+              </div>
             </th>
             <th
               className="border-r border-border px-1 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-muted leading-tight"
@@ -278,14 +387,17 @@ export function TaskTable({
               Est.
               <span className="block font-normal normal-case">(min.)</span>
             </th>
-            {dates.map((d) => {
+            {dates.map((d, i) => {
               const today = isToday(d);
               const dow = dayOfWeek(d);
               const weekend = dow === 0 || dow === 6;
               return (
                 <th
                   key={d}
-                  ref={today ? todayCellRef : undefined}
+                  ref={(el) => {
+                    dateCellRefs.current[i] = el;
+                    if (today) todayCellRef.current = el;
+                  }}
                   className={cn(
                     "px-0 py-1.5 text-center align-middle font-medium leading-tight",
                     today
@@ -515,6 +627,21 @@ export function TaskTable({
           />
         )}
       </div>
+      {/* Monthly completion trend, aligned column-for-column with the table and
+          sharing its horizontal scroll on narrow screens. */}
+      {chartGeom && chartGeom.width > 0 && (
+        <div className="min-w-[1000px] border-t border-border">
+          <div className="px-4 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Daily completion
+          </div>
+          <MonthlyTrendChart
+            points={trendPoints}
+            width={chartGeom.width}
+            plotLeft={chartGeom.plotLeft}
+            plotRight={chartGeom.plotRight}
+          />
+        </div>
+      )}
     </div>
     {tip && (
       <div
@@ -592,6 +719,37 @@ function buildTip(
 
 function fmtNum(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+// A single task's 0–1 contribution to a day's completion: boolean is done/not,
+// percentage counts capped progress. Mirrors the server-side rollup in
+// lib/services/analytics so the live chart matches the Insights numbers.
+function contributionOf(task: Task, v?: TaskLogValue): number {
+  if (!v) return 0;
+  if (task.type === "boolean") return v.boolStatus ? 1 : 0;
+  return Math.min(100, v.percentage ?? 0) / 100;
+}
+
+// A short human status for one task on one day, shown in the chart's hover
+// breakdown — e.g. "Done", "Stayed clean", "2.4 / 3 L · 80%", "80%".
+function cellText(task: Task, v?: TaskLogValue): string {
+  if (task.type === "boolean") {
+    const done = v?.boolStatus ?? false;
+    if (task.goal === "avoid") return done ? "Stayed clean" : "Slipped";
+    return done ? "Done" : "Missed";
+  }
+  if (!v) return "No entry";
+  const raw = v.rawPercentage ?? v.percentage ?? 0;
+  if (v.actualValue != null) {
+    const target = v.targetValueSnapshot ?? task.percentageConfig?.targetValue;
+    const unit = v.unitSnapshot ?? task.percentageConfig?.unit?.value ?? "";
+    const amount =
+      target != null
+        ? `${fmtNum(v.actualValue)} / ${fmtNum(target)} ${unit}`.trim()
+        : `${fmtNum(v.actualValue)} ${unit}`.trim();
+    return `${amount} · ${Math.round(raw)}%`;
+  }
+  return `${Math.round(raw)}%`;
 }
 
 // Static display of a logged value for any day other than today. Editing is

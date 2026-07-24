@@ -120,6 +120,23 @@ export async function getExtraActivities(
   return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+/** All extra activities in a date range — powers the dashboard chart's per-day
+ *  hover, so past days can surface what else you did (the table only ever shows
+ *  today's). Sorted by date then creation time. */
+export async function getExtraActivitiesInRange(
+  from: DayKey,
+  to: DayKey,
+  userId?: string,
+): Promise<ExtraActivity[]> {
+  userId ??= await resolveUserId();
+  const rows = await db.extraActivities.find(
+    (e) => e.userId === userId && e.date >= from && e.date <= to,
+  );
+  return rows.sort(
+    (a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt),
+  );
+}
+
 export async function deleteExtraActivity(
   id: string,
   userId?: string,

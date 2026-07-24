@@ -5,8 +5,11 @@
 
 import {
   format,
+  parse,
   parseISO,
+  isValid,
   addDays,
+  addMonths,
   startOfWeek,
   startOfMonth,
   endOfMonth,
@@ -59,6 +62,35 @@ export function monthDays(ref: Date = new Date()): DayKey[] {
     start: startOfMonth(ref),
     end: endOfMonth(ref),
   }).map(toDayKey);
+}
+
+export type MonthKey = string; // "YYYY-MM"
+
+/** "YYYY-MM" for a given Date (defaults to now). */
+export function monthKey(d: Date = new Date()): MonthKey {
+  return format(d, "yyyy-MM");
+}
+
+/** Parse a "YYYY-MM" key into a Date at the first of that month; null if malformed. */
+export function monthKeyToDate(key: string): Date | null {
+  if (!/^\d{4}-\d{2}$/.test(key)) return null;
+  const d = parse(key, "yyyy-MM", new Date());
+  return isValid(d) ? startOfMonth(d) : null;
+}
+
+/** Shift a "YYYY-MM" key by `n` months (negative = earlier). */
+export function shiftMonth(key: MonthKey, n: number): MonthKey {
+  return monthKey(addMonths(monthKeyToDate(key) ?? new Date(), n));
+}
+
+/** Human month label, e.g. "July 2026". */
+export function monthLabel(key: MonthKey): string {
+  return format(monthKeyToDate(key) ?? new Date(), "MMMM yyyy");
+}
+
+/** Compact month label for tight spaces, e.g. "Jul 2026". */
+export function monthLabelShort(key: MonthKey): string {
+  return format(monthKeyToDate(key) ?? new Date(), "MMM yyyy");
 }
 
 /** The 7 day-keys of the week containing `ref` (week starts Monday), oldest first. */

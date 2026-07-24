@@ -20,6 +20,12 @@ const NAV = [
 export function Navbar() {
   const pathname = usePathname();
   const { isSignedIn } = useAuth();
+
+  // Hide the nav on the auth pages — they render Clerk's own centered card.
+  if (pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up")) {
+    return null;
+  }
+
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-surface/80 backdrop-blur">
       <div className="flex h-14 w-full items-center px-4 sm:px-6 lg:px-8">
