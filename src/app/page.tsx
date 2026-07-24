@@ -1,7 +1,6 @@
 import { EmptyState } from "@/components/ui";
 import { NewTaskButton } from "@/components/new-task-button";
 import { TaskTable } from "@/components/task-table";
-import { ExtraActivities } from "@/components/extra-activities";
 import { AiQuickAdd } from "@/components/ai/ai-quick-add";
 import { auth } from "@clerk/nextjs/server";
 import { aiConfigured } from "@/lib/services/ai";
@@ -51,10 +50,15 @@ export default async function DashboardPage() {
           action={<NewTaskButton categories={categories} />}
         />
       ) : (
-        <TaskTable tasks={tasks} dates={dates} initialLogs={logs} />
+        <TaskTable
+          tasks={tasks}
+          dates={dates}
+          initialLogs={logs}
+          initialExtras={extras}
+          categories={categories}
+          today={today}
+        />
       )}
-
-      <ExtraActivities date={today} initial={extras} categories={categories} />
     </div>
   );
 }

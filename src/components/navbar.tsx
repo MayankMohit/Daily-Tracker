@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
@@ -21,15 +22,13 @@ export function Navbar() {
   const { isSignedIn } = useAuth();
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-surface/80 backdrop-blur">
-      <div className="flex h-14 w-full items-center gap-6 px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent text-accent-foreground text-sm">
-            ✓
-          </span>
+      <div className="flex h-14 w-full items-center px-4 sm:px-6 lg:px-8">
+        <Link href="/" className="flex items-center gap-2 font-bold tracking-tight text-lg">
+          <Image src="/icons/logo.png" alt={APP_NAME} width={40} height={40} className="rounded-md" priority unoptimized />
           <span className="hidden sm:inline">{APP_NAME}</span>
         </Link>
 
-        <nav className="flex items-center gap-1 text-sm">
+        <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 text-sm">
           {NAV.map((item) => {
             const active =
               item.href === "/"

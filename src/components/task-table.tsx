@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Task, TaskLog, TaskLogValue } from "@/lib/types";
+import type { ExtraActivity, Task, TaskLog, TaskLogValue } from "@/lib/types";
 import { api } from "@/lib/client";
 import { logKey } from "@/lib/keys";
 import { taskAppliesOn } from "@/lib/recurrence";
@@ -25,10 +25,16 @@ export function TaskTable({
   tasks,
   dates,
   initialLogs,
+  initialExtras = [],
+  categories: categoryList = [],
+  today,
 }: {
   tasks: Task[];
   dates: DayKey[];
   initialLogs: TaskLog[];
+  initialExtras?: ExtraActivity[];
+  categories?: string[];
+  today?: DayKey;
 }) {
   const router = useRouter();
   // Distinct existing category names, offered as suggestions in the edit form.
@@ -44,6 +50,42 @@ export function TaskTable({
     for (const l of initialLogs) m.set(logKey(l.taskId, l.date), l.value);
     return m;
   });
+
+  const [extras, setExtras] = useState<ExtraActivity[]>(initialExtras);
+  const [exDesc, setExDesc] = useState("");
+  const [exDur, setExDur] = useState("");
+  const [exCat, setExCat] = useState("");
+  const [exBusy, setExBusy] = useState(false);
+
+  async function addExtra() {
+    const desc = exDesc.trim();
+    if (!desc || !today) return;
+    setExBusy(true);
+    try {
+      const created = await api.post<ExtraActivity>("/api/extra-activities", {
+        date: today,
+        description: desc,
+        estimatedDuration: exDur ? Number(exDur) : undefined,
+        category: exCat || undefined,
+      });
+      setExtras((xs) => [...xs, created]);
+      setExDesc("");
+      setExDur("");
+      setExCat("");
+    } finally {
+      setExBusy(false);
+    }
+  }
+
+  async function removeExtra(id: string) {
+    const prev = extras;
+    setExtras((xs) => xs.filter((x) => x._id !== id));
+    try {
+      await api.del(`/api/extra-activities/${id}`);
+    } catch {
+      setExtras(prev);
+    }
+  }
 
   // Hover tooltip anchored above the cell under the pointer. It only appears
   // after the pointer has rested on a cell for a beat, so a quick sweep across
@@ -130,6 +172,7 @@ export function TaskTable({
   // live cell and render one absolute overlay over the full column height.
   const tableRef = useRef<HTMLTableElement>(null);
   const todayCellRef = useRef<HTMLTableCellElement>(null);
+  const taskRowsEndRef = useRef<HTMLTableRowElement>(null);
   const [todayBox, setTodayBox] = useState<{
     left: number;
     width: number;
@@ -145,7 +188,11 @@ export function TaskTable({
       }
       const t = table.getBoundingClientRect();
       const c = cell.getBoundingClientRect();
-      setTodayBox({ left: c.left - t.left, width: c.width, height: t.height });
+      const endRow = taskRowsEndRef.current;
+      const height = endRow
+        ? endRow.getBoundingClientRect().bottom - t.top
+        : t.height;
+      setTodayBox({ left: c.left - t.left, width: c.width, height });
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -270,9 +317,10 @@ export function TaskTable({
           </tr>
         </thead>
         <tbody>
-          {order.map((task) => (
+          {order.map((task, i) => (
             <tr
               key={task._id}
+              ref={i === order.length - 1 ? taskRowsEndRef : undefined}
               draggable={handleId === task._id}
               onDragStart={(e) => {
                 dragIdRef.current = task._id;
@@ -373,6 +421,84 @@ export function TaskTable({
               })}
             </tr>
           ))}
+          {/* Extra activity rows */}
+          {extras.map((ex) => (
+            <tr key={ex._id} className="group border-b border-border/40 bg-surface-2/30">
+              <td
+                colSpan={dates.length + 2}
+                className="sticky left-0 z-10 px-4 py-2 align-middle"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-accent/70 shrink-0">
+                    +did
+                  </span>
+                  <span className="flex-1 truncate text-sm text-foreground/80">{ex.description}</span>
+                  {ex.category && (
+                    <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-muted shrink-0">
+                      {ex.category}
+                    </span>
+                  )}
+                  {ex.estimatedDuration && (
+                    <span className="text-[11px] text-muted tabular-nums shrink-0">{ex.estimatedDuration}m</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeExtra(ex._id)}
+                    aria-label="Remove"
+                    className="text-muted opacity-0 transition-opacity hover:text-danger group-hover:opacity-100 shrink-0"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+
+          {/* Inline "did today" add row */}
+          {today && (
+            <tr className="border-t border-border/60 bg-surface-2/10">
+              <td colSpan={dates.length + 2} className="px-4 py-2 align-middle">
+                <form
+                  className="flex items-center gap-2"
+                  onSubmit={(e) => { e.preventDefault(); addExtra(); }}
+                >
+                  <input
+                    className="h-8 flex-1 min-w-0 rounded-md border border-border bg-surface px-3 text-sm placeholder:text-muted/50 focus-visible:border-accent focus-visible:outline-none"
+                    placeholder="+ What else did you do today?"
+                    value={exDesc}
+                    onChange={(e) => setExDesc(e.target.value)}
+                  />
+                  <input
+                    className="h-8 w-16 shrink-0 rounded-md border border-border bg-surface px-2 text-center text-sm tabular-nums placeholder:text-muted/50 focus-visible:border-accent focus-visible:outline-none"
+                    type="number"
+                    min="0"
+                    placeholder="min"
+                    value={exDur}
+                    onChange={(e) => setExDur(e.target.value)}
+                  />
+                  {categoryList.length > 0 && (
+                    <select
+                      className="h-8 w-28 shrink-0 rounded-md border border-border bg-surface px-2 text-sm text-muted focus-visible:border-accent focus-visible:outline-none"
+                      value={exCat}
+                      onChange={(e) => setExCat(e.target.value)}
+                    >
+                      <option value="">Category</option>
+                      {categoryList.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={exBusy || !exDesc.trim()}
+                    className="h-8 shrink-0 rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground hover:opacity-90 disabled:opacity-40"
+                  >
+                    Add
+                  </button>
+                </form>
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
         {todayBox && (

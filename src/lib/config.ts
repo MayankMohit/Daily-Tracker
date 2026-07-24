@@ -6,7 +6,7 @@
 
 export const CURRENT_USER_ID = "local-user";
 
-export const APP_NAME = "Daily Tracker";
+export const APP_NAME = "LockedIn";
 
 /** Default timezone until the user sets one; overridden client-side on first load. */
 export const DEFAULT_TIMEZONE = "UTC";

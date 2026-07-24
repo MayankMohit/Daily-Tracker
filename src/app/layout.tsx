@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     template: `%s · ${APP_NAME}`,
   },
   description:
-    "A minimal, table-based daily task manager with mood tracking, journaling, and AI insights.",
+    "LockedIn — stay focused with daily task tracking, mood logging, journaling, and AI insights.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     title: APP_NAME,
   },
   icons: {
-    icon: "/icons/icon-192.png",
+    icon: "/favicon.png",
     apple: "/icons/apple-touch-icon.png",
   },
 };
