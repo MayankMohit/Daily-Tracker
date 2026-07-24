@@ -54,7 +54,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} min-h-dvh font-sans antialiased`}
       >
-        <ClerkProvider>
+        <ClerkProvider
+          signInUrl="/sign-in"
+          signUpUrl="/sign-up"
+          signInFallbackRedirectUrl="/"
+          signUpFallbackRedirectUrl="/"
+        >
           <ThemeProvider>
             <Navbar />
             <main className="w-full px-4 py-6 sm:px-6 lg:px-8">{children}</main>

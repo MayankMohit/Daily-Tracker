@@ -1,11 +1,16 @@
 // Clerk auth proxy (Next.js 16 renamed `middleware` → `proxy`).
 //
-// Attaches the Clerk session to every app + API route so `auth()` works in
-// Server Components and Route Handlers. It does NOT gate access here — auth is
-// enforced at each resource instead (pages call `auth.protect()`, API routes
-// check `auth()` in the shared `handler` wrapper). This resource-based approach
-// replaces the deprecated `createRouteMatcher` path-matching, which could
-// diverge from how Next.js actually routes requests.
+// Attaches the Clerk session to every app + API route and gates access here at
+// the edge, before any page component runs. Doing it in the proxy (rather than
+// calling `auth.protect()` inside a page) means protection happens after Clerk
+// has finished processing the sign-in/OAuth handshake, so the two never race.
+//
+// Unauthenticated requests are redirected to the app's OWN `/sign-in` page
+// (see src/app/sign-in). We pass `unauthenticatedUrl` explicitly so the
+// redirect always stays on this domain instead of bouncing to the hosted
+// Account Portal on the accounts.* subdomain — that cross-subdomain hop is what
+// caused the sign-in reload loop, because the session cookie set on the portal
+// domain couldn't be verified back on the app domain.
 
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
@@ -16,11 +21,11 @@ const isPublicRoute = createRouteMatcher([
   "/__clerk(.*)",
 ]);
 
-// Protect all routes at the proxy level so auth.protect() in page components
-// never races against the Clerk OAuth handshake completing.
 export default clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) {
-    await auth.protect();
+    await auth.protect({
+      unauthenticatedUrl: new URL("/sign-in", req.url).toString(),
+    });
   }
 });
 
