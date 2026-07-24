@@ -1,23 +1,28 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { format } from "date-fns";
 import { useAuth, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import { cn } from "@/lib/cn";
 import { APP_NAME } from "@/lib/config";
+import { dayKeyToDate } from "@/lib/date";
+import type { ActiveDayState } from "@/lib/active-day";
+import { syncActiveDay, advanceActiveDay } from "@/app/actions/active-day";
 import { ThemeToggle } from "./theme-toggle";
 
 const NAV = [
   { href: "/", label: "Dashboard" },
-  { href: "/mood", label: "Mood" },
   { href: "/journal", label: "Journal" },
+  { href: "/history", label: "History" },
   { href: "/insights", label: "Insights" },
   { href: "/planner", label: "Day Planner" },
   { href: "/settings", label: "Settings" },
 ];
 
-export function Navbar() {
+export function Navbar({ activeDay }: { activeDay: ActiveDayState }) {
   const pathname = usePathname();
   const { isSignedIn } = useAuth();
 
@@ -58,6 +63,7 @@ export function Navbar() {
         </nav>
 
         <div className="ml-auto flex items-center gap-3">
+          <DayControl initial={activeDay} />
           <ThemeToggle />
           {isSignedIn ? (
             <UserButton appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
@@ -78,5 +84,60 @@ export function Navbar() {
         </div>
       </div>
     </header>
+  );
+}
+
+/**
+ * Overnight day-rollover control. When the calendar date has moved ahead but the
+ * app is still holding the previous day (so you can finish that day's journal and
+ * logs), this shows a button to advance. It also persists the day anchor on mount
+ * so the hold reliably triggers after midnight. Auto-advances at 6 PM regardless.
+ */
+function DayControl({ initial }: { initial: ActiveDayState }) {
+  const router = useRouter();
+  const [state, setState] = useState(initial);
+  const [advancing, setAdvancing] = useState(false);
+
+  // Keep the cookie anchored to the effective day during normal use.
+  useEffect(() => {
+    syncActiveDay()
+      .then((s) => setState(s))
+      .catch(() => {});
+  }, []);
+
+  if (!state.held) return null;
+
+  const heldLabel = format(dayKeyToDate(state.effective), "EEE, MMM d");
+  const nextLabel = format(dayKeyToDate(state.real), "MMM d");
+
+  async function proceed() {
+    setAdvancing(true);
+    try {
+      const s = await advanceActiveDay();
+      setState(s);
+      router.refresh();
+    } catch {
+      setAdvancing(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className="hidden text-xs text-muted md:inline"
+        title={`The app is still on ${heldLabel}. It advances to ${nextLabel} automatically at 6 PM.`}
+      >
+        📌 On {heldLabel}
+      </span>
+      <button
+        type="button"
+        onClick={proceed}
+        disabled={advancing}
+        title={`Move to ${nextLabel}. Do this once you're done logging ${heldLabel}.`}
+        className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+      >
+        {advancing ? "Advancing…" : "Proceed to next date →"}
+      </button>
+    </div>
   );
 }

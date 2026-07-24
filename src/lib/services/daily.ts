@@ -2,13 +2,19 @@
 // (userId, date); mood and journal are one-per-day upserts, extra activities are
 // a running list.
 
-import { db, newId, getUserPrefs } from "@/lib/store/db";
+import { db, newId } from "@/lib/store/db";
 import { resolveUserId } from "@/lib/auth";
-import type { MoodLog, JournalEntry, ExtraActivity } from "@/lib/types";
+import type {
+  MoodLog,
+  JournalEntry,
+  JournalKeyDoc,
+  ExtraActivity,
+} from "@/lib/types";
 import type { DayKey } from "@/lib/date";
 import type {
   MoodInput,
   JournalInput,
+  JournalKeySetup,
   ExtraActivityInput,
 } from "@/lib/schemas";
 
@@ -63,11 +69,13 @@ export async function setJournal(
       _id: newId(),
       userId,
       date: input.date,
-      text: input.text,
-      allowAiRead: input.allowAiRead,
+      cipher: input.cipher,
+      iv: input.iv,
       updatedAt: now,
     }),
-    { text: input.text, allowAiRead: input.allowAiRead, updatedAt: now },
+    // Overwrite any legacy plaintext with the ciphertext so no readable copy
+    // lingers server-side once an entry has been encrypted.
+    { cipher: input.cipher, iv: input.iv, text: "", updatedAt: now },
   );
 }
 
@@ -81,13 +89,96 @@ export async function getJournal(
   );
 }
 
-/** The global default AI-read preference for new journal entries (plan §3.3). */
-export async function journalAiDefault(
+// ---- Journal encryption key params (non-secret) ----
+
+export async function getJournalKey(
   userId?: string,
-): Promise<boolean> {
+): Promise<JournalKeyDoc | null> {
   userId ??= await resolveUserId();
-  const prefs = await getUserPrefs(userId);
-  return prefs.ai.journalInformedByDefault;
+  return db.journalKeys.findById(userId);
+}
+
+/** First-time setup of the journal key envelope. Refuses to overwrite a valid
+ *  existing one (use {@link rekeyJournalKey} to change the passphrase), but will
+ *  replace a malformed/legacy doc that lacks a usable envelope — otherwise such
+ *  a doc would leave the user permanently unable to set up or unlock. */
+export async function setJournalKey(
+  input: JournalKeySetup,
+  userId?: string,
+): Promise<JournalKeyDoc> {
+  userId ??= await resolveUserId();
+  const existing = await db.journalKeys.findById(userId);
+  if (existing && existing.wrappedDek && existing.wrappedDekIv) {
+    throw new Error("Journal passphrase is already set");
+  }
+  const now = new Date().toISOString();
+  if (existing) {
+    const updated = await db.journalKeys.update(userId, {
+      salt: input.salt,
+      wrappedDek: input.wrappedDek,
+      wrappedDekIv: input.wrappedDekIv,
+      updatedAt: now,
+    });
+    if (!updated) throw new Error("Could not set up journal encryption");
+    return updated;
+  }
+  const doc: JournalKeyDoc = {
+    _id: userId,
+    userId,
+    salt: input.salt,
+    wrappedDek: input.wrappedDek,
+    wrappedDekIv: input.wrappedDekIv,
+    createdAt: now,
+  };
+  return db.journalKeys.insert(doc);
+}
+
+/** Change passphrase: store the DEK re-wrapped under the new passphrase. Entries
+ *  are untouched (they're keyed by the DEK, which is unchanged). Requires an
+ *  existing envelope; the caller proves the old passphrase client-side by
+ *  unwrapping the DEK before producing the new wrap. */
+export async function rekeyJournalKey(
+  input: JournalKeySetup,
+  userId?: string,
+): Promise<JournalKeyDoc> {
+  userId ??= await resolveUserId();
+  const existing = await db.journalKeys.findById(userId);
+  if (!existing) throw new Error("No journal passphrase to change");
+  const updated = await db.journalKeys.update(userId, {
+    salt: input.salt,
+    wrappedDek: input.wrappedDek,
+    wrappedDekIv: input.wrappedDekIv,
+    updatedAt: new Date().toISOString(),
+  });
+  if (!updated) throw new Error("Could not update journal passphrase");
+  return updated;
+}
+
+/** Journal entries in a date range, as stored (ciphertext + IV, and any legacy
+ *  plaintext). Safe to send to the owner's browser, which decrypts client-side;
+ *  the server never holds the key. Sorted oldest first. */
+export async function getJournalsInRange(
+  from: DayKey,
+  to: DayKey,
+  userId?: string,
+): Promise<JournalEntry[]> {
+  userId ??= await resolveUserId();
+  const rows = await db.journalEntries.find(
+    (j) => j.userId === userId && j.date >= from && j.date <= to,
+  );
+  return rows.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Entries still holding legacy plaintext (pre-encryption), for the client to
+ *  re-encrypt on unlock. Returns plaintext only to the signed-in owner. */
+export async function getLegacyJournals(
+  userId?: string,
+): Promise<{ date: string; text: string }[]> {
+  userId ??= await resolveUserId();
+  const rows = await db.journalEntries.find(
+    (j) => j.userId === userId && !j.cipher && !!j.text && j.text.trim() !== "",
+  );
+  return rows.map((j) => ({ date: j.date, text: j.text as string }));
 }
 
 // ---- Extra activities ----

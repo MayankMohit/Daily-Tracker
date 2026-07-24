@@ -6,6 +6,7 @@ import { ThemeProvider, themeInitScript } from "@/components/theme-provider";
 import { Navbar } from "@/components/navbar";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { APP_NAME } from "@/lib/config";
+import { getActiveDay } from "@/lib/active-day";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,11 +41,13 @@ export const viewport: Viewport = {
   themeColor: "#4f46e5",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const activeDay = await getActiveDay();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -61,7 +64,7 @@ export default function RootLayout({
           signUpFallbackRedirectUrl="/"
         >
           <ThemeProvider>
-            <Navbar />
+            <Navbar activeDay={activeDay} />
             <main className="w-full px-4 py-6 sm:px-6 lg:px-8">{children}</main>
           </ThemeProvider>
           <ServiceWorkerRegister />

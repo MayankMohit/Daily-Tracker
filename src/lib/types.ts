@@ -115,10 +115,35 @@ export interface JournalEntry {
   _id: string;
   userId: string;
   date: string;
-  text: string;
-  allowAiRead: boolean;
+  /** AES-GCM ciphertext (base64) of the entry. The server never sees plaintext. */
+  cipher?: string;
+  /** AES-GCM IV (base64) for `cipher`. */
+  iv?: string;
+  /** Legacy plaintext from before end-to-end encryption; re-encrypted (and
+   *  cleared) the next time the user unlocks their journal. */
+  text?: string;
+  /** @deprecated Journals are end-to-end encrypted; AI never reads them. */
+  allowAiRead?: boolean;
   moodRef?: string;
   updatedAt: string;
+}
+
+/** Per-user journal key envelope (all non-secret). The passphrase-derived key
+ *  never leaves the browser; the server only holds the salt and the wrapped data
+ *  key. Unwrapping it (client-side) both yields the entry key and proves the
+ *  passphrase — none of these fields can reveal the passphrase or any entry. */
+export interface JournalKeyDoc {
+  _id: string; // userId
+  userId: string;
+  /** PBKDF2 salt (base64) for the key-encryption key. */
+  salt: string;
+  /** The data key, encrypted (wrapped) with the passphrase-derived key (base64). */
+  wrappedDek: string;
+  /** AES-GCM IV (base64) for `wrappedDek`. */
+  wrappedDekIv: string;
+  createdAt: string;
+  /** Set when the passphrase is changed (the DEK is re-wrapped, entries unchanged). */
+  updatedAt?: string;
 }
 
 export interface ExtraActivity {

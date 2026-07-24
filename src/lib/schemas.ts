@@ -94,13 +94,25 @@ export const moodInputSchema = z.object({
 
 export type MoodInput = z.infer<typeof moodInputSchema>;
 
+// Journal entries are end-to-end encrypted client-side: the server stores and
+// validates only opaque ciphertext + IV, never plaintext.
 export const journalInputSchema = z.object({
   date: dayKey,
-  text: z.string().max(20000),
-  allowAiRead: z.boolean(),
+  cipher: z.string().min(1).max(60000),
+  iv: z.string().min(1).max(64),
 });
 
 export type JournalInput = z.infer<typeof journalInputSchema>;
+
+/** A user's journal key envelope (all non-secret). Used for both first-time
+ *  setup and passphrase changes — the latter just re-wraps the same data key. */
+export const journalKeySetupSchema = z.object({
+  salt: z.string().min(1).max(128),
+  wrappedDek: z.string().min(1).max(1024),
+  wrappedDekIv: z.string().min(1).max(64),
+});
+
+export type JournalKeySetup = z.infer<typeof journalKeySetupSchema>;
 
 export const extraActivityInputSchema = z.object({
   date: dayKey,

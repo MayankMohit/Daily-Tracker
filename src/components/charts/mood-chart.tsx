@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import type { MoodPoint } from "@/lib/services/analytics";
 import { monthDayLabel } from "@/lib/date";
-import { MOODS } from "@/components/mood-strip";
+import { MOODS } from "@/lib/moods";
 
 // Mood over time (plan §6). 1–5 scale; gaps are connected so the trend reads
 // clearly even with missing days.

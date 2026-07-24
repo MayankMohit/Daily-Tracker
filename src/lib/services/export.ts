@@ -92,9 +92,10 @@ export function toCsv(bundle: ExportBundle): string {
     rows.push(csvRow([m.date, "mood", "", m.mood, m.note ?? ""]));
   }
   for (const j of bundle.journalEntries) {
-    rows.push(
-      csvRow([j.date, "journal", "", j.text, j.allowAiRead ? "ai-read" : ""]),
-    );
+    // Journals are end-to-end encrypted; the server can't decrypt them for a
+    // server-side export. Legacy plaintext (not yet re-encrypted) still exports.
+    const body = j.text && j.text.trim() ? j.text : "[encrypted]";
+    rows.push(csvRow([j.date, "journal", "", body, ""]));
   }
   for (const e of bundle.extraActivities) {
     rows.push(

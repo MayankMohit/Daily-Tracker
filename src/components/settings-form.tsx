@@ -129,11 +129,6 @@ export function SettingsForm({ initial }: { initial: UserPrefs }) {
 
         <div className="space-y-2">
           <Toggle
-            label="Let AI read journal entries by default"
-            checked={ai.journalInformedByDefault}
-            onChange={(v) => setAi({ ...ai, journalInformedByDefault: v })}
-          />
-          <Toggle
             label="Surface mood–productivity insights"
             checked={ai.moodCorrelation}
             onChange={(v) => setAi({ ...ai, moodCorrelation: v })}

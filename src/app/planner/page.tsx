@@ -2,7 +2,7 @@ import { PageHeader, EmptyState } from "@/components/ui";
 import { PlannerClient } from "@/components/ai/planner-client";
 import { auth } from "@clerk/nextjs/server";
 import { aiConfigured, getCachedPlan } from "@/lib/services/ai";
-import { todayKey } from "@/lib/date";
+import { getEffectiveToday } from "@/lib/active-day";
 
 export const metadata = { title: "Day Planner" };
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function PlannerPage() {
   await auth.protect();
 
-  const date = todayKey();
+  const date = await getEffectiveToday();
 
   if (!aiConfigured) {
     return (

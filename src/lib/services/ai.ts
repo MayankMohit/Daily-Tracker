@@ -10,7 +10,7 @@ import { resolveUserId } from "@/lib/auth";
 import { getUserPrefs } from "./prefs";
 import { listTasks } from "./tasks";
 import { getLogsInRange, indexLogs } from "./logs";
-import { getMood, getJournal } from "./daily";
+import { getMood } from "./daily";
 import {
   getDailyCompletion,
   getMoodSeries,
@@ -73,13 +73,11 @@ async function dailyContext(userId: string, date: DayKey): Promise<string> {
     : "- (no tasks scheduled today)";
 
   const mood = await getMood(date, userId);
-  const journal = await getJournal(date, userId);
 
+  // Journals are end-to-end encrypted — the server can't read them, so they're
+  // deliberately never part of the AI context.
   const parts = [`Date: ${date}`, `Today's tasks:\n${taskLines}`];
   if (mood) parts.push(`Mood: ${mood.mood}/5${mood.note ? ` — "${mood.note}"` : ""}`);
-  if (journal && journal.allowAiRead && journal.text.trim()) {
-    parts.push(`Journal (user opted in to sharing):\n${journal.text.slice(0, 1500)}`);
-  }
   return parts.join("\n\n");
 }
 

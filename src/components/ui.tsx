@@ -77,7 +77,7 @@ export function PageHeader({
 }
 
 export const inputClass =
-  "h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-foreground placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent";
+  "h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm text-foreground placeholder:text-muted focus:outline-none focus-visible:outline-none focus:border-foreground/40 focus-visible:border-foreground/40";
 
 export const labelClass = "block text-sm font-medium text-foreground";
 

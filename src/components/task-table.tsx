@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import type { ExtraActivity, Task, TaskLog, TaskLogValue } from "@/lib/types";
+import type { ExtraActivity, MoodLog, Task, TaskLog, TaskLogValue } from "@/lib/types";
 import { api } from "@/lib/client";
 import { logKey } from "@/lib/keys";
 import { taskAppliesOn } from "@/lib/recurrence";
@@ -16,11 +16,15 @@ import {
   dayNumberLabel,
   dayOfWeek,
   isToday,
+  toDayKey,
   type DayKey,
 } from "@/lib/date";
+import { MOODS } from "@/lib/moods";
 import { cn } from "@/lib/cn";
 import { TaskRowMenu } from "./task-row-menu";
 import { MonthlyTrendChart, type TrendPoint } from "./charts/monthly-trend-chart";
+import { MoodTrendChart, type MoodTrendPoint } from "./charts/mood-trend-chart";
+import { MoodInsight, type MoodInsightData } from "./mood-insight";
 
 export function TaskTable({
   tasks,
@@ -28,6 +32,7 @@ export function TaskTable({
   initialLogs,
   initialExtras = [],
   monthExtras = [],
+  initialMoods = [],
   categories: categoryList = [],
   today,
   monthNav,
@@ -39,6 +44,8 @@ export function TaskTable({
   /** All of the month's extra activities, for the chart's per-day hover. The
    *  table itself still only shows today's (via `initialExtras`). */
   monthExtras?: ExtraActivity[];
+  /** The viewed month's mood logs, powering the mood chart + correlation. */
+  initialMoods?: MoodLog[];
   categories?: string[];
   today?: DayKey;
   /** Month pager, rendered inline in the "Task" header cell. */
@@ -92,6 +99,30 @@ export function TaskTable({
       await api.del(`/api/extra-activities/${id}`);
     } catch {
       setExtras(prev);
+    }
+  }
+
+  // Mood, one value (1–5) per day. Only today is settable (like the log cells);
+  // past days are read-only history shown on the chart. Optimistic with rollback.
+  const [moods, setMoods] = useState<Map<DayKey, number>>(() => {
+    const m = new Map<DayKey, number>();
+    for (const x of initialMoods) m.set(x.date, x.mood);
+    return m;
+  });
+
+  async function setTodayMood(mood: number) {
+    if (!today) return;
+    const prev = moods.get(today);
+    setMoods((m) => new Map(m).set(today, mood));
+    try {
+      await api.post("/api/mood", { date: today, mood });
+    } catch {
+      setMoods((m) => {
+        const next = new Map(m);
+        if (prev) next.set(today, prev);
+        else next.delete(today);
+        return next;
+      });
     }
   }
 
@@ -343,6 +374,53 @@ export function TaskTable({
     [dates, order, logs, today, chartGeom, extrasByDate],
   );
 
+  // Mood plotted on the same column grid as the completion trend.
+  const moodTrendPoints = useMemo<MoodTrendPoint[]>(
+    () =>
+      dates.map((d, i) => ({
+        x: chartGeom?.centers[i] ?? 0,
+        mood: moods.get(d) ?? null,
+        label: monthDayLabel(d),
+        weekday: weekdayLabel(d),
+        isToday: today ? d === today : false,
+      })),
+    [dates, moods, chartGeom, today],
+  );
+
+  // Pair each day's mood with its completion to read the mood↔productivity link.
+  // Uses the completion the trend chart already computed, so it stays in lockstep
+  // with live edits.
+  const moodInsight = useMemo<MoodInsightData>(() => {
+    const completionByDate = new Map<DayKey, number | null>();
+    trendPoints.forEach((p, i) => completionByDate.set(dates[i], p.value));
+
+    const pairs: { mood: number; rate: number }[] = [];
+    for (const d of dates) {
+      const mood = moods.get(d);
+      const val = completionByDate.get(d);
+      if (mood === undefined || val === null || val === undefined) continue;
+      pairs.push({ mood, rate: val / 100 });
+    }
+    const avg = (xs: { rate: number }[]) =>
+      xs.length ? xs.reduce((s, x) => s + x.rate, 0) / xs.length : null;
+
+    return {
+      today: today
+        ? {
+            mood: moods.get(today) ?? null,
+            completion: completionByDate.get(today) ?? null,
+          }
+        : null,
+      goodAvg: avg(pairs.filter((p) => p.mood >= 4)),
+      lowAvg: avg(pairs.filter((p) => p.mood <= 2)),
+      correlation: pearson(
+        pairs.map((p) => p.mood),
+        pairs.map((p) => p.rate),
+      ),
+      pairedDays: pairs.length,
+    };
+  }, [dates, moods, trendPoints, today]);
+
   if (tasks.length === 0) return null;
 
   return (
@@ -488,9 +566,25 @@ export function TaskTable({
               {dates.map((d) => {
                 const applies = taskAppliesOn(task, d);
                 const value = logs.get(logKey(task._id, d));
-                const today = isToday(d);
+                const isCurrent = isToday(d);
                 const dow = dayOfWeek(d);
                 const weekend = dow === 0 || dow === 6;
+                // A day is "past" relative to now. When viewing an earlier month
+                // (`today` prop undefined) every day is past; in the current month
+                // it's the days before today.
+                const isPast = today ? d < today : true;
+                // The task couldn't be missed before it existed. `createdAt` is a
+                // UTC timestamp; compare on its local day (matches HabitChart).
+                const existed = d >= toDayKey(new Date(task.createdAt));
+                // Missed = scheduled on a past day the task already existed, with
+                // nothing to show for it (boolean not done / percentage no entry).
+                // A partial percentage entry is progress, not a miss.
+                const missed =
+                  applies &&
+                  isPast &&
+                  existed &&
+                  !isCurrent &&
+                  (task.type === "boolean" ? !value?.boolStatus : !value);
                 return (
                   <td
                     key={d}
@@ -499,7 +593,7 @@ export function TaskTable({
                         ? (e) => {
                             const r = e.currentTarget.getBoundingClientRect();
                             showTipLater({
-                              ...buildTip(task, d, value, today),
+                              ...buildTip(task, d, value, isCurrent),
                               x: r.left + r.width / 2,
                               y: r.top,
                             });
@@ -509,7 +603,7 @@ export function TaskTable({
                     onMouseLeave={applies ? hideTip : undefined}
                     className={cn(
                       "px-0 py-1.5 text-center align-middle",
-                      today
+                      isCurrent
                         ? "bg-foreground/[0.04]"
                         : weekend
                           ? "bg-surface-2/20"
@@ -517,8 +611,13 @@ export function TaskTable({
                     )}
                   >
                     {!applies ? (
-                      <span className="text-border">·</span>
-                    ) : today ? (
+                      // Not scheduled this day — a bold dash (with a hover
+                      // explanation) so it reads as a deliberate "off" marker, not
+                      // a broken/missing input.
+                      <DashMark
+                        title={isCurrent ? "Not scheduled today" : "Not scheduled"}
+                      />
+                    ) : isCurrent ? (
                       // Only today is editable; past/future days are read-only.
                       <TaskCell
                         task={task}
@@ -526,7 +625,7 @@ export function TaskTable({
                         onCommit={(body) => commit(task._id, d, body)}
                       />
                     ) : (
-                      <ReadonlyCell task={task} value={value} />
+                      <ReadonlyCell task={task} value={value} missed={missed} />
                     )}
                   </td>
                 );
@@ -575,13 +674,13 @@ export function TaskTable({
                   onSubmit={(e) => { e.preventDefault(); addExtra(); }}
                 >
                   <input
-                    className="h-8 flex-1 min-w-0 rounded-md border border-border bg-surface px-3 text-sm placeholder:text-muted/50 focus-visible:border-accent focus-visible:outline-none"
+                    className="h-8 flex-1 min-w-0 rounded-md border border-border bg-surface px-3 text-sm placeholder:text-muted/50 focus-visible:border-foreground/40 focus-visible:outline-none"
                     placeholder="+ What else did you do today?"
                     value={exDesc}
                     onChange={(e) => setExDesc(e.target.value)}
                   />
                   <input
-                    className="h-8 w-16 shrink-0 rounded-md border border-border bg-surface px-2 text-center text-sm tabular-nums placeholder:text-muted/50 focus-visible:border-accent focus-visible:outline-none"
+                    className="h-8 w-16 shrink-0 rounded-md border border-border bg-surface px-2 text-center text-sm tabular-nums placeholder:text-muted/50 focus-visible:border-foreground/40 focus-visible:outline-none"
                     type="number"
                     min="0"
                     placeholder="min"
@@ -590,7 +689,7 @@ export function TaskTable({
                   />
                   {categoryList.length > 0 && (
                     <select
-                      className="h-8 w-28 shrink-0 rounded-md border border-border bg-surface px-2 text-sm text-muted focus-visible:border-accent focus-visible:outline-none"
+                      className="h-8 w-28 shrink-0 rounded-md border border-border bg-surface px-2 text-sm text-muted focus-visible:border-foreground/40 focus-visible:outline-none"
                       value={exCat}
                       onChange={(e) => setExCat(e.target.value)}
                     >
@@ -642,7 +741,53 @@ export function TaskTable({
           />
         </div>
       )}
+      {/* Mood, on the same column grid so it reads against the table + trend. */}
+      {chartGeom && chartGeom.width > 0 && (
+        <div className="min-w-[1000px] border-t border-border">
+          <div className="px-4 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Mood
+          </div>
+          <MoodTrendChart
+            points={moodTrendPoints}
+            width={chartGeom.width}
+            plotLeft={chartGeom.plotLeft}
+            plotRight={chartGeom.plotRight}
+          />
+        </div>
+      )}
     </div>
+
+    {/* Today's mood input + the read-out sit outside the scrolling table card so
+        they stay in view on narrow screens. Past months are read-only (no input). */}
+    {today && (
+      <div className="rounded-xl border border-border bg-surface px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="text-sm text-muted">How was today?</span>
+          <div className="flex flex-wrap gap-1.5">
+            {MOODS.map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                onClick={() => setTodayMood(m.value)}
+                title={m.label}
+                aria-label={m.label}
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-lg border text-lg transition-colors",
+                  moods.get(today) === m.value
+                    ? "border-accent bg-accent/10"
+                    : "border-border hover:bg-surface-2",
+                )}
+              >
+                {m.emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
+
+    <MoodInsight data={moodInsight} />
+
     {tip && (
       <div
         aria-hidden
@@ -730,6 +875,28 @@ function contributionOf(task: Task, v?: TaskLogValue): number {
   return Math.min(100, v.percentage ?? 0) / 100;
 }
 
+// Pearson correlation between two equal-length series, or null when it isn't
+// meaningful (fewer than 3 pairs, or either series is constant). Mirrors the
+// server-side rollup in lib/services/analytics.
+function pearson(xs: number[], ys: number[]): number | null {
+  const n = xs.length;
+  if (n < 3) return null;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let num = 0;
+  let dx = 0;
+  let dy = 0;
+  for (let i = 0; i < n; i++) {
+    const a = xs[i] - mx;
+    const b = ys[i] - my;
+    num += a * b;
+    dx += a * a;
+    dy += b * b;
+  }
+  if (dx === 0 || dy === 0) return null;
+  return num / Math.sqrt(dx * dy);
+}
+
 // A short human status for one task on one day, shown in the chart's hover
 // breakdown — e.g. "Done", "Stayed clean", "2.4 / 3 L · 80%", "80%".
 function cellText(task: Task, v?: TaskLogValue): string {
@@ -753,20 +920,30 @@ function cellText(task: Task, v?: TaskLogValue): string {
 }
 
 // Static display of a logged value for any day other than today. Editing is
-// intentionally limited to the current date (see the table body above).
-function ReadonlyCell({ task, value }: { task: Task; value?: TaskLogValue }) {
+// intentionally limited to the current date (see the table body above). `missed`
+// marks a scheduled day (after the task existed) that went unlogged/undone.
+function ReadonlyCell({
+  task,
+  value,
+  missed,
+}: {
+  task: Task;
+  value?: TaskLogValue;
+  missed?: boolean;
+}) {
   if (task.type === "boolean") {
     const done = value?.boolStatus ?? false;
-    return done ? (
-      <span className="mx-auto grid h-7 w-7 place-items-center">
-        <CheckMark className="h-4 w-4 text-white" />
-      </span>
-    ) : (
-      <span className="text-border">·</span>
-    );
+    if (done) {
+      return (
+        <span className="mx-auto grid h-7 w-7 place-items-center">
+          <CheckMark className="h-4 w-4 text-foreground" />
+        </span>
+      );
+    }
+    return missed ? <MissedMark /> : <span className="text-border">·</span>;
   }
 
-  if (!value) return <span className="text-border">·</span>;
+  if (!value) return missed ? <MissedMark /> : <span className="text-border">·</span>;
   const pct = value.percentage ?? 0;
   const raw = value.rawPercentage ?? pct;
   return (
@@ -825,6 +1002,48 @@ function MiniPie({
           fill={fill}
         />
       ) : null}
+    </svg>
+  );
+}
+
+// A missed scheduled day: a bold "✕" in the danger colour (visible in both
+// themes) so lapses stand out when scanning a row — no cell background needed.
+function MissedMark() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      role="img"
+      aria-label="Missed"
+      className="mx-auto h-4 w-4 text-danger"
+    >
+      <title>Missed — scheduled but not done</title>
+      <path
+        d="M7 7l10 10M17 7L7 17"
+        stroke="currentColor"
+        strokeWidth={3.25}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// Not-scheduled marker: a bold dash in the muted colour, sized/weighted to stay
+// clearly visible in light and dark without a cell background.
+function DashMark({ title }: { title: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      role="img"
+      aria-label="Not scheduled"
+      className="mx-auto h-4 w-4 text-muted"
+    >
+      <title>{title}</title>
+      <path
+        d="M6 12h12"
+        stroke="currentColor"
+        strokeWidth={3.25}
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -950,7 +1169,7 @@ function TaskCell({
         className={cn(
           "mx-auto grid h-7 w-7 place-items-center rounded-md border transition-colors",
           done
-            ? "border-transparent text-white"
+            ? "border-transparent text-foreground"
             : "border-border/70 text-transparent hover:border-muted hover:text-muted",
         )}
       >
@@ -1039,7 +1258,7 @@ function QuantityInput({
         if (e.key === "Enter") e.currentTarget.blur();
       }}
       placeholder={mode === "direct" ? "%" : "—"}
-      className="h-8 w-full rounded-md border-2 border-border bg-surface px-1 text-center text-sm tabular-nums focus-visible:border-accent focus-visible:outline-none"
+      className="h-8 w-full rounded-md border-2 border-border bg-surface px-1 text-center text-sm tabular-nums focus-visible:border-foreground/40 focus-visible:outline-none"
     />
   );
 }

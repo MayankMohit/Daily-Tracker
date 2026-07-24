@@ -9,8 +9,10 @@ import { getLogsInRange } from "@/lib/services/logs";
 import {
   getExtraActivities,
   getExtraActivitiesInRange,
+  getMoodsInRange,
 } from "@/lib/services/daily";
-import { monthDays, monthKey, monthKeyToDate, todayKey } from "@/lib/date";
+import { monthDays, monthKey, monthKeyToDate, dayKeyToDate } from "@/lib/date";
+import { getEffectiveToday } from "@/lib/active-day";
 
 // Always render fresh — the file store changes as the user logs values.
 export const dynamic = "force-dynamic";
@@ -20,8 +22,8 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ month?: string | string[] }>;
 }) {
-  const today = todayKey();
-  const currentMonth = monthKey();
+  const today = await getEffectiveToday();
+  const currentMonth = monthKey(dayKeyToDate(today));
 
   // Which month is being viewed (`?month=YYYY-MM`). Default to — and never page
   // beyond — the current month, since there's no future data to show.
@@ -36,11 +38,12 @@ export default async function DashboardPage({
   const from = dates[0];
   const to = dates[dates.length - 1];
 
-  const [tasks, logs, extras, monthExtras] = await Promise.all([
+  const [tasks, logs, extras, monthExtras, moods] = await Promise.all([
     listTasks(),
     getLogsInRange(from, to),
     getExtraActivities(today),
     getExtraActivitiesInRange(from, to),
+    getMoodsInRange(from, to),
   ]);
 
   const categories = Array.from(
@@ -78,6 +81,7 @@ export default async function DashboardPage({
           // months are read-only history.
           initialExtras={isCurrentMonth ? extras : []}
           monthExtras={monthExtras}
+          initialMoods={moods}
           categories={categories}
           today={isCurrentMonth ? today : undefined}
           monthNav={<MonthNav viewMonth={viewMonth} isCurrent={isCurrentMonth} />}
