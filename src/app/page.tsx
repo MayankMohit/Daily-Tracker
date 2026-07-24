@@ -2,7 +2,6 @@ import { EmptyState } from "@/components/ui";
 import { NewTaskButton } from "@/components/new-task-button";
 import { TaskTable } from "@/components/task-table";
 import { AiQuickAdd } from "@/components/ai/ai-quick-add";
-import { auth } from "@clerk/nextjs/server";
 import { aiConfigured } from "@/lib/services/ai";
 import { listTasks } from "@/lib/services/tasks";
 import { getLogsInRange } from "@/lib/services/logs";
@@ -13,8 +12,6 @@ import { monthDays, todayKey } from "@/lib/date";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  await auth.protect();
-
   const today = todayKey();
   const dates = monthDays();
   const from = dates[0];

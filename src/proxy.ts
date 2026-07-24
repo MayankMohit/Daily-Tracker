@@ -7,17 +7,27 @@
 // replaces the deprecated `createRouteMatcher` path-matching, which could
 // diverge from how Next.js actually routes requests.
 
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-export default clerkMiddleware();
+// Public routes that don't require authentication.
+const isPublicRoute = createRouteMatcher([
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/__clerk(.*)",
+]);
+
+// Protect all routes at the proxy level so auth.protect() in page components
+// never races against the Clerk OAuth handshake completing.
+export default clerkMiddleware(async (auth, req) => {
+  if (!isPublicRoute(req)) {
+    await auth.protect();
+  }
+});
 
 export const config = {
   matcher: [
-    // Run on everything except Next internals and static file extensions…
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    // …always run on API routes…
     "/(api|trpc)(.*)",
-    // …and on Clerk's auto-proxy path.
     "/__clerk/:path*",
   ],
 };
