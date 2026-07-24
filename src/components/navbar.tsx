@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+import { useAuth, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import { cn } from "@/lib/cn";
 import { APP_NAME } from "@/lib/config";
 import { ThemeToggle } from "./theme-toggle";
@@ -18,6 +18,7 @@ const NAV = [
 
 export function Navbar() {
   const pathname = usePathname();
+  const { isSignedIn } = useAuth();
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-surface/80 backdrop-blur">
       <div className="flex h-14 w-full items-center gap-6 px-4 sm:px-6 lg:px-8">
@@ -53,7 +54,9 @@ export function Navbar() {
 
         <div className="ml-auto flex items-center gap-3">
           <ThemeToggle />
-          <Show when="signed-out">
+          {isSignedIn ? (
+            <UserButton appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
+          ) : (
             <div className="flex items-center gap-2 text-sm">
               <SignInButton mode="modal">
                 <button className="rounded-md px-3 py-1.5 text-muted hover:bg-surface-2 hover:text-foreground">
@@ -66,12 +69,7 @@ export function Navbar() {
                 </button>
               </SignUpButton>
             </div>
-          </Show>
-          <Show when="signed-in">
-            <UserButton
-              appearance={{ elements: { avatarBox: "h-8 w-8" } }}
-            />
-          </Show>
+          )}
         </div>
       </div>
     </header>
