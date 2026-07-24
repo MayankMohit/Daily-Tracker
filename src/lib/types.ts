@@ -1,0 +1,202 @@
+// Domain types for the Daily Task Manager.
+// These mirror the MongoDB collections described in plan.md §5, but are
+// storage-agnostic so we can back them with a local JSON store now and swap in
+// Mongoose later without touching the UI.
+
+export type TaskType = "boolean" | "percentage";
+/**
+ * Whether the task is about *doing* something ("build" — the default) or
+ * *not* doing something ("avoid", e.g. quit smoking, no doomscrolling). Avoid
+ * tasks are always boolean: a checked day means "stayed clean / resisted",
+ * which counts as a success just like a completed build task.
+ */
+export type TaskGoal = "build" | "avoid";
+export type PercentageMode = "quantity" | "direct";
+export type Priority = "low" | "medium" | "high";
+export type Recurrence = "daily" | "weekdays" | "custom" | "one-off";
+
+/** A unit for a quantity-based percentage task, e.g. { type: "preset", value: "L" }. */
+export interface UnitValue {
+  type: "preset" | "custom";
+  value: string;
+}
+
+export interface PercentageConfig {
+  mode: PercentageMode;
+  /** Only for mode = "quantity". */
+  unit?: UnitValue;
+  /** Only for mode = "quantity". */
+  targetValue?: number;
+}
+
+export interface Reminder {
+  /** "HH:mm" 24h local time, or null for no reminder. */
+  time: string | null;
+  /** Days of week the reminder repeats on: 0 = Sunday … 6 = Saturday. */
+  days: number[];
+}
+
+export interface AiMeta {
+  lastAnalyzedAt?: string;
+  trend?: "up" | "down" | "flat";
+  notes?: string;
+}
+
+export interface Task {
+  _id: string;
+  userId: string;
+  title: string;
+  description?: string;
+  type: TaskType;
+  /** "build" (do it) or "avoid" (quit/abstain). Avoid tasks are always boolean. */
+  goal: TaskGoal;
+  /** Present only when type = "percentage". */
+  percentageConfig?: PercentageConfig;
+  category?: string;
+  priority: Priority;
+  /** Minutes; optional, required only for the Day Planner. */
+  estimatedDuration?: number;
+  recurrence: Recurrence;
+  /** Days of week (0-6) when recurrence = "custom". */
+  recurrenceDays?: number[];
+  /** ISO date strings (YYYY-MM-DD). */
+  startDate?: string;
+  endDate?: string;
+  reminder?: Reminder;
+  /** Hex color for quick visual scanning in the table. */
+  color?: string;
+  active: boolean;
+  /** Manual row position in the dashboard table; lower = higher up. Unset for
+   *  tasks never reordered — those fall to the bottom, ordered by createdAt. */
+  sortOrder?: number;
+  createdAt: string;
+  aiMeta?: AiMeta;
+}
+
+export type TaskLogKind = "boolean" | "direct_percentage" | "quantity";
+
+export interface TaskLogValue {
+  kind: TaskLogKind;
+  /** kind = "boolean". */
+  boolStatus?: boolean;
+  /** Capped 0-100. Present for percentage kinds; used for progress bars / cell color. */
+  percentage?: number;
+  /** Uncapped (e.g. 133). quantity mode only — preserves overachievement for graphs. */
+  rawPercentage?: number;
+  /** Raw amount entered by the user. quantity mode only. */
+  actualValue?: number;
+  /** Target as of this day. quantity mode only — snapshotted so past days stay correct. */
+  targetValueSnapshot?: number;
+  /** Unit as of this day. quantity mode only. */
+  unitSnapshot?: string;
+}
+
+/** One doc per (task, date). The real source of truth for the table and graphs. */
+export interface TaskLog {
+  _id: string;
+  userId: string;
+  taskId: string;
+  /** YYYY-MM-DD in the user's timezone. */
+  date: string;
+  value: TaskLogValue;
+  completedAt?: string;
+}
+
+export interface MoodLog {
+  _id: string;
+  userId: string;
+  date: string;
+  /** 1 (low) – 5 (high). */
+  mood: number;
+  note?: string;
+}
+
+export interface JournalEntry {
+  _id: string;
+  userId: string;
+  date: string;
+  text: string;
+  allowAiRead: boolean;
+  moodRef?: string;
+  updatedAt: string;
+}
+
+export interface ExtraActivity {
+  _id: string;
+  userId: string;
+  date: string;
+  description: string;
+  estimatedDuration?: number;
+  category?: string;
+  createdAt: string;
+}
+
+export interface DailyPlanRequest {
+  _id: string;
+  userId: string;
+  date: string;
+  items: { description: string; estimatedDuration?: number }[];
+}
+
+export interface DailyPlan {
+  _id: string;
+  userId: string;
+  date: string;
+  blocks: { start: string; end: string; item: string; note?: string }[];
+  generatedAt: string;
+}
+
+export interface AiInsight {
+  _id: string;
+  userId: string;
+  type: "daily" | "weekly";
+  date: string;
+  summary: string;
+  recommendations: string[];
+}
+
+export interface ReminderDoc {
+  _id: string;
+  userId: string;
+  taskId?: string;
+  message: string;
+  /** ISO timestamp (UTC). */
+  fireAt: string;
+  sent: boolean;
+}
+
+export interface PushSubscriptionDoc {
+  _id: string;
+  userId: string;
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+  createdAt: string;
+}
+
+export interface AiUsageCounter {
+  _id: string;
+  scope: "global" | string; // "global" or a userId
+  date: string;
+  callsMade: number;
+  callsByFeature: Record<string, number>;
+}
+
+export type AiTone = "encouraging" | "neutral" | "blunt";
+export type AiFrequency = "daily" | "daily+weekly" | "off";
+export type ThemeChoice = "light" | "dark" | "system";
+
+export interface UserPrefs {
+  _id: string; // userId
+  userId: string;
+  theme: ThemeChoice;
+  timezone: string;
+  /** Day Planner window, e.g. { wake: "07:00", sleep: "23:00" }. */
+  workingHours: { wake: string; sleep: string };
+  ai: {
+    frequency: AiFrequency;
+    tone: AiTone;
+    journalInformedByDefault: boolean;
+    moodCorrelation: boolean;
+    extraActivityAutoTag: boolean;
+  };
+}

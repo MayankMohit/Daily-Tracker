@@ -40,3 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 plan.md
+
+# local file-based data store (dev, no MongoDB yet)
+/.data
+
+# Terminal Paste Image folder
+.cp-images/
