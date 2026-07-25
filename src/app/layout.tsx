@@ -27,9 +27,12 @@ const caveat = Caveat({
 });
 
 export const metadata: Metadata = {
+  // The installed PWA window prepends the manifest name (APP_NAME) to the page
+  // title, so keeping the brand here too would show "LockedIn … - LockedIn …".
+  // Page titles stay brand-free; the manifest carries the name.
   title: {
-    default: `${APP_NAME} — track your days`,
-    template: `%s · ${APP_NAME}`,
+    default: "Dashboard",
+    template: "%s",
   },
   description:
     "LockedIn — stay focused with daily task tracking, mood logging, journaling, and AI insights.",
