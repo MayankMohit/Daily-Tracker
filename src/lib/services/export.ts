@@ -34,11 +34,23 @@ export async function getExportBundle(
   const inRange = (d: DayKey) => d >= from && d <= to;
   const [tasks, taskLogs, moodLogs, journalEntries, extraActivities] =
     await Promise.all([
-      db.tasks.find((t) => t.userId === userId),
-      db.taskLogs.find((l) => l.userId === userId && inRange(l.date)),
-      db.moodLogs.find((m) => m.userId === userId && inRange(m.date)),
-      db.journalEntries.find((j) => j.userId === userId && inRange(j.date)),
-      db.extraActivities.find((e) => e.userId === userId && inRange(e.date)),
+      db.tasks.find((t) => t.userId === userId, { userId }),
+      db.taskLogs.find((l) => l.userId === userId && inRange(l.date), {
+        userId,
+        date: { $gte: from, $lte: to },
+      }),
+      db.moodLogs.find((m) => m.userId === userId && inRange(m.date), {
+        userId,
+        date: { $gte: from, $lte: to },
+      }),
+      db.journalEntries.find((j) => j.userId === userId && inRange(j.date), {
+        userId,
+        date: { $gte: from, $lte: to },
+      }),
+      db.extraActivities.find((e) => e.userId === userId && inRange(e.date), {
+        userId,
+        date: { $gte: from, $lte: to },
+      }),
     ]);
 
   return {

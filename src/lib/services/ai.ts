@@ -206,7 +206,9 @@ export async function generateSummary(
     recommendations: (result.recommendations ?? []).slice(0, 6),
   };
 
-  await db.aiInsights.upsert((c) => c._id === id, () => insight, insight);
+  await db.aiInsights.upsert((c) => c._id === id, () => insight, insight, {
+    _id: id,
+  });
   return insight;
 }
 
@@ -450,7 +452,9 @@ export async function generateDayPlan(
     generatedAt: new Date().toISOString(),
   };
 
-  await db.dailyPlans.upsert((c) => c._id === plan._id, () => plan, plan);
+  await db.dailyPlans.upsert((c) => c._id === plan._id, () => plan, plan, {
+    _id: plan._id,
+  });
   return plan;
 }
 

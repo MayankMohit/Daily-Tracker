@@ -30,6 +30,7 @@ export async function setMood(
     match,
     () => ({ _id: newId(), userId, date: input.date, mood: input.mood }),
     { mood: input.mood, note: input.note?.trim() || undefined },
+    { userId, date: input.date },
   );
 }
 
@@ -38,7 +39,10 @@ export async function getMood(
   userId?: string,
 ): Promise<MoodLog | null> {
   userId ??= await resolveUserId();
-  return db.moodLogs.findOne((m) => m.userId === userId && m.date === date);
+  return db.moodLogs.findOne(
+    (m) => m.userId === userId && m.date === date,
+    { userId, date },
+  );
 }
 
 export async function getMoodsInRange(
@@ -49,6 +53,7 @@ export async function getMoodsInRange(
   userId ??= await resolveUserId();
   const rows = await db.moodLogs.find(
     (m) => m.userId === userId && m.date >= from && m.date <= to,
+    { userId, date: { $gte: from, $lte: to } },
   );
   return rows.sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -76,6 +81,7 @@ export async function setJournal(
     // Overwrite any legacy plaintext with the ciphertext so no readable copy
     // lingers server-side once an entry has been encrypted.
     { cipher: input.cipher, iv: input.iv, text: "", updatedAt: now },
+    { userId, date: input.date },
   );
 }
 
@@ -86,6 +92,7 @@ export async function getJournal(
   userId ??= await resolveUserId();
   return db.journalEntries.findOne(
     (j) => j.userId === userId && j.date === date,
+    { userId, date },
   );
 }
 
@@ -165,6 +172,7 @@ export async function getJournalsInRange(
   userId ??= await resolveUserId();
   const rows = await db.journalEntries.find(
     (j) => j.userId === userId && j.date >= from && j.date <= to,
+    { userId, date: { $gte: from, $lte: to } },
   );
   return rows.sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -177,6 +185,7 @@ export async function getLegacyJournals(
   userId ??= await resolveUserId();
   const rows = await db.journalEntries.find(
     (j) => j.userId === userId && !j.cipher && !!j.text && j.text.trim() !== "",
+    { userId },
   );
   return rows.map((j) => ({ date: j.date, text: j.text as string }));
 }
@@ -207,6 +216,7 @@ export async function getExtraActivities(
   userId ??= await resolveUserId();
   const rows = await db.extraActivities.find(
     (e) => e.userId === userId && e.date === date,
+    { userId, date },
   );
   return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
@@ -222,6 +232,7 @@ export async function getExtraActivitiesInRange(
   userId ??= await resolveUserId();
   const rows = await db.extraActivities.find(
     (e) => e.userId === userId && e.date >= from && e.date <= to,
+    { userId, date: { $gte: from, $lte: to } },
   );
   return rows.sort(
     (a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt),

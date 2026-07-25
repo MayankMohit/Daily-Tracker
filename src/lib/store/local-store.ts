@@ -20,6 +20,15 @@ export interface Doc {
   _id: string;
 }
 
+/**
+ * Optional MongoDB-style filter passed alongside a JS predicate on reads. It is a
+ * pure *performance hint*: the Mongo backend uses it to fetch only the matching
+ * documents instead of the whole collection, then still applies the predicate so
+ * results are identical to the local backend (which ignores the filter entirely).
+ * Keep the filter a subset of what the predicate checks so the two never diverge.
+ */
+export type StoreFilter = Record<string, unknown>;
+
 type DB = Record<string, Doc[]>;
 
 const DATA_DIR = path.join(process.cwd(), ".data");
@@ -69,15 +78,20 @@ function clone<T>(v: T): T {
 
 export interface Collection<T extends Doc> {
   all(): Promise<T[]>;
-  find(pred: (d: T) => boolean): Promise<T[]>;
-  findOne(pred: (d: T) => boolean): Promise<T | null>;
+  find(pred: (d: T) => boolean, filter?: StoreFilter): Promise<T[]>;
+  findOne(pred: (d: T) => boolean, filter?: StoreFilter): Promise<T | null>;
   findById(id: string): Promise<T | null>;
   insert(doc: T): Promise<T>;
   update(id: string, patch: Partial<T>): Promise<T | null>;
   /** Update the first doc matching `pred`, or insert `make()` if none exists. */
-  upsert(pred: (d: T) => boolean, make: () => T, patch: Partial<T>): Promise<T>;
+  upsert(
+    pred: (d: T) => boolean,
+    make: () => T,
+    patch: Partial<T>,
+    filter?: StoreFilter,
+  ): Promise<T>;
   remove(id: string): Promise<boolean>;
-  removeWhere(pred: (d: T) => boolean): Promise<number>;
+  removeWhere(pred: (d: T) => boolean, filter?: StoreFilter): Promise<number>;
 }
 
 function makeCollection<T extends Doc>(name: string): Collection<T> {

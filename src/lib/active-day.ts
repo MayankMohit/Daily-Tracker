@@ -14,6 +14,7 @@
 // timezone (Settings → timezone), via Intl, so they line up with the user's
 // actual clock regardless of where the server runs.
 
+import { cache } from "react";
 import { addDays } from "date-fns";
 import { cookies } from "next/headers";
 import { resolveUserId } from "./auth";
@@ -98,7 +99,7 @@ export function computeActiveDay(
  *  root layout renders on those too, so we degrade to the default zone rather
  *  than crash the whole render — real app routes always run the proxy, and the
  *  client's `syncActiveDay` Server Action corrects any transient fallback. */
-export async function getActiveTimeZone(): Promise<string> {
+export const getActiveTimeZone = cache(async (): Promise<string> => {
   try {
     const userId = await resolveUserId();
     const prefs = await getUserPrefs(userId);
@@ -106,13 +107,16 @@ export async function getActiveTimeZone(): Promise<string> {
   } catch {
     return DEFAULT_TIMEZONE;
   }
-}
+});
 
-/** Resolve the active day from the request's cookie (read-only; safe in RSC). */
-export async function getActiveDay(): Promise<ActiveDayState> {
+/** Resolve the active day from the request's cookie (read-only; safe in RSC).
+ *  Cached per request: the root layout and the page both call this (the latter
+ *  via getEffectiveToday), and without memoization each repeats the cookie read,
+ *  Clerk auth, and prefs lookup. */
+export const getActiveDay = cache(async (): Promise<ActiveDayState> => {
   const [jar, timeZone] = await Promise.all([cookies(), getActiveTimeZone()]);
   return computeActiveDay(jar.get(ACTIVE_DAY_COOKIE)?.value, timeZone);
-}
+});
 
 /** Convenience: just the effective "today" for a page. */
 export async function getEffectiveToday(): Promise<DayKey> {

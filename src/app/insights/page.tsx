@@ -9,7 +9,12 @@ import { AiSummaryCard } from "@/components/ai/ai-summary-card";
 import { auth } from "@clerk/nextjs/server";
 import { getEffectiveToday } from "@/lib/active-day";
 
-export const metadata = { title: "Insights" };
+export const metadata = {
+  title: "Insights",
+  description:
+    "Charts, completion rates, habit streaks, and AI-generated insights across your tracked days.",
+  robots: { index: false, follow: false },
+};
 export const dynamic = "force-dynamic";
 
 const WINDOW = 30;

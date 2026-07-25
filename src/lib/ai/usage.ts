@@ -61,5 +61,6 @@ export async function reserveCall(
         [feature]: (existing?.callsByFeature?.[feature] ?? 0) + 1,
       },
     },
+    { _id: id },
   );
 }

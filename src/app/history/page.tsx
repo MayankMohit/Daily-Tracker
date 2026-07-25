@@ -12,7 +12,12 @@ import {
 import { monthDays, monthKey, monthKeyToDate, dayKeyToDate } from "@/lib/date";
 import { getEffectiveToday } from "@/lib/active-day";
 
-export const metadata = { title: "History" };
+export const metadata = {
+  title: "History",
+  description:
+    "Browse a calendar of your past days — tasks, moods, and journal entries at a glance.",
+  robots: { index: false, follow: false },
+};
 export const dynamic = "force-dynamic";
 
 export default async function HistoryPage({

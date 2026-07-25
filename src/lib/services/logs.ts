@@ -58,14 +58,17 @@ export async function logValue(
   const match = (l: TaskLog) =>
     l.userId === userId && l.taskId === input.taskId && l.date === input.date;
 
+  // Filter narrows the Mongo query to this exact cell (the predicate still runs).
+  const scope = { userId, taskId: input.taskId, date: input.date };
+
   if (input.clear) {
-    await db.taskLogs.removeWhere(match);
+    await db.taskLogs.removeWhere(match, scope);
     return null;
   }
 
   const value = computeValue(task, input);
   if (isEmpty(value)) {
-    await db.taskLogs.removeWhere(match);
+    await db.taskLogs.removeWhere(match, scope);
     return null;
   }
 
@@ -81,6 +84,7 @@ export async function logValue(
       completedAt: now,
     }),
     { value, completedAt: now },
+    scope,
   );
 }
 
@@ -92,6 +96,7 @@ export async function getLogsInRange(
   userId ??= await resolveUserId();
   return db.taskLogs.find(
     (l) => l.userId === userId && l.date >= from && l.date <= to,
+    { userId, date: { $gte: from, $lte: to } },
   );
 }
 
@@ -102,6 +107,7 @@ export async function getLogsForTask(
   userId ??= await resolveUserId();
   const logs = await db.taskLogs.find(
     (l) => l.userId === userId && l.taskId === taskId,
+    { userId, taskId },
   );
   return logs.sort((a, b) => a.date.localeCompare(b.date));
 }

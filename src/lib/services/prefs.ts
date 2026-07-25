@@ -35,5 +35,6 @@ export async function saveUserPrefs(
     (p) => p._id === userId,
     () => defaultUserPrefs(userId),
     next,
+    { _id: userId },
   );
 }

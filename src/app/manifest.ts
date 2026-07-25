@@ -1,14 +1,17 @@
 import type { MetadataRoute } from "next";
-import { APP_NAME } from "@/lib/config";
+import { APP_NAME, APP_DESCRIPTION } from "@/lib/config";
 
 // Web App Manifest (plan §5). Served at /manifest.webmanifest by Next.
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/",
     name: `${APP_NAME} — daily task manager`,
     short_name: APP_NAME,
-    description:
-      "A minimal, table-based daily task manager with mood tracking, journaling, and insights.",
+    description: APP_DESCRIPTION,
+    lang: "en",
+    dir: "ltr",
+    categories: ["productivity", "lifestyle", "utilities"],
     start_url: "/",
     scope: "/",
     display: "standalone",

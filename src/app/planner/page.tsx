@@ -5,7 +5,11 @@ import { aiConfigured, getCachedPlan } from "@/lib/services/ai";
 import { getUserPrefs } from "@/lib/services/prefs";
 import { getEffectiveToday } from "@/lib/active-day";
 
-export const metadata = { title: "Day Planner" };
+export const metadata = {
+  title: "Day Planner",
+  description: "Plan your day with an AI-assisted schedule built from your tasks.",
+  robots: { index: false, follow: false },
+};
 export const dynamic = "force-dynamic";
 
 export default async function PlannerPage() {

@@ -8,6 +8,40 @@ export const CURRENT_USER_ID = "local-user";
 
 export const APP_NAME = "LockedIn";
 
+/** One-line pitch used for OG/Twitter titles and structured data. */
+export const APP_TAGLINE = "Daily task & habit tracker";
+
+/** Long-form description reused across metadata, manifest, and JSON-LD. */
+export const APP_DESCRIPTION =
+  "LockedIn is a minimal daily task tracker with habit streaks, mood logging, private end-to-end encrypted journaling, and AI-powered insights — built to help you stay focused and consistent.";
+
+/** SEO keywords surfaced in the root metadata. */
+export const APP_KEYWORDS = [
+  "daily task tracker",
+  "habit tracker",
+  "habit streaks",
+  "productivity app",
+  "mood tracker",
+  "journaling app",
+  "daily planner",
+  "AI insights",
+  "self improvement",
+  "LockedIn",
+];
+
+/**
+ * Canonical origin for absolute URLs (metadataBase, sitemap, robots, OG images).
+ * Set `NEXT_PUBLIC_SITE_URL` in production (e.g. https://lockedin.example.com);
+ * falls back to the Vercel deploy URL, then localhost for dev. Trailing slash
+ * trimmed so `${SITE_URL}/path` never doubles up.
+ */
+export const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000")
+).replace(/\/$/, "");
+
 /** Default timezone until the user sets one; overridden client-side on first load. */
 export const DEFAULT_TIMEZONE = "UTC";
 

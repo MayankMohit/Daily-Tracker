@@ -18,7 +18,20 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
 // via Clerk's `createRouteMatcher` helper, which is deprecated in favour of
 // resource-based checks — but we keep protection at the proxy so it runs before
 // any page renders (avoiding a race with the sign-in handshake).
-const PUBLIC_PREFIXES = ["/sign-in", "/sign-up", "/__clerk"];
+// SEO / PWA metadata files must be reachable by crawlers and social scrapers
+// without a session. The matcher below already lets `.webmanifest` through, but
+// robots/sitemap (.txt/.xml) and the extensionless OG image routes are still
+// matched, so list them here to skip auth.protect() and return 200.
+const PUBLIC_PREFIXES = [
+  "/sign-in",
+  "/sign-up",
+  "/__clerk",
+  "/robots.txt",
+  "/sitemap.xml",
+  "/manifest.webmanifest",
+  "/opengraph-image",
+  "/twitter-image",
+];
 const isPublicRoute = (pathname: string) =>
   PUBLIC_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),

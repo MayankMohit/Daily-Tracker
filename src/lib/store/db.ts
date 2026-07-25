@@ -2,6 +2,7 @@
 // Everything above this file (API routes, server code) talks to `db`, never to
 // the underlying store, so the storage backend can be swapped without churn.
 
+import { cache } from "react";
 import { nanoid } from "nanoid";
 import { collection } from "./index";
 import { CURRENT_USER_ID } from "@/lib/config";
@@ -62,7 +63,11 @@ export function defaultUserPrefs(userId = CURRENT_USER_ID): UserPrefs {
   };
 }
 
-export async function getUserPrefs(userId = CURRENT_USER_ID): Promise<UserPrefs> {
-  const existing = await db.userPrefs.findById(userId);
-  return existing ?? defaultUserPrefs(userId);
-}
+// Read once per request per user — the layout and page both resolve prefs
+// (via getActiveDay), and settings/planner read them again.
+export const getUserPrefs = cache(
+  async (userId = CURRENT_USER_ID): Promise<UserPrefs> => {
+    const existing = await db.userPrefs.findById(userId);
+    return existing ?? defaultUserPrefs(userId);
+  },
+);

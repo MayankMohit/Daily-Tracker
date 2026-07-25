@@ -4,7 +4,12 @@ import { resolveUserId } from "@/lib/auth";
 import { getJournal, getJournalKey } from "@/lib/services/daily";
 import { getEffectiveToday } from "@/lib/active-day";
 
-export const metadata = { title: "Journal" };
+export const metadata = {
+  title: "Journal",
+  description:
+    "Write private, end-to-end encrypted journal entries for each day.",
+  robots: { index: false, follow: false },
+};
 export const dynamic = "force-dynamic";
 
 export default async function JournalPage() {

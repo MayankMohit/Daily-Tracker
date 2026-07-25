@@ -21,6 +21,7 @@ export async function listTasks(
   userId ??= await resolveUserId();
   const tasks = await db.tasks.find(
     (t) => t.userId === userId && (includeArchived || t.active),
+    { userId },
   );
   return tasks.sort(compareByOrder);
 }
@@ -153,7 +154,10 @@ export async function deleteTask(
   userId ??= await resolveUserId();
   const existing = await getTask(id, userId);
   if (!existing) return false;
-  await db.taskLogs.removeWhere((l) => l.taskId === id && l.userId === userId);
+  await db.taskLogs.removeWhere(
+    (l) => l.taskId === id && l.userId === userId,
+    { userId, taskId: id },
+  );
   return db.tasks.remove(id);
 }
 

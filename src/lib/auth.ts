@@ -8,14 +8,18 @@
 // Internal service→service calls pass a concrete userId, so this only actually
 // hits Clerk's `auth()` once per request (at the entry point).
 
+import { cache } from "react";
 import { auth } from "@clerk/nextjs/server";
 import { CURRENT_USER_ID } from "./config";
 
 /** Whether Clerk credentials are present. Evaluated once at module load. */
 export const clerkConfigured = Boolean(process.env.CLERK_SECRET_KEY);
 
-export async function resolveUserId(): Promise<string> {
+// `cache` dedupes within a single request: a page render calls resolveUserId()
+// through the layout, getActiveDay, and every un-scoped service call — without
+// this that's a fresh Clerk `auth()` each time. Memoizing collapses them to one.
+export const resolveUserId = cache(async (): Promise<string> => {
   if (!clerkConfigured) return CURRENT_USER_ID;
   const { userId } = await auth();
   return userId ?? CURRENT_USER_ID;
-}
+});

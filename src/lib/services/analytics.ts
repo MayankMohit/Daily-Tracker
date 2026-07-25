@@ -222,6 +222,7 @@ export async function getCategoryBreakdown(
   const logs = await getLogsInRange(from, to, userId);
   const extras = await db.extraActivities.find(
     (e) => e.userId === userId && e.date >= from && e.date <= to,
+    { userId, date: { $gte: from, $lte: to } },
   );
 
   const totals = new Map<string, CategoryTime>();

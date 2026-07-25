@@ -13,7 +13,7 @@
 // scale, these can be turned into real Mongo queries without changing callers.
 
 import mongoose from "mongoose";
-import type { Collection, Doc } from "./local-store";
+import type { Collection, Doc, StoreFilter } from "./local-store";
 
 // Cache the connection promise on the global object so Next's dev hot-reload and
 // the separate route/render module instances all share one pooled connection.
@@ -30,17 +30,18 @@ function connect(): Promise<typeof mongoose> {
 
 // One permissive model per collection name. `strict: false` lets us store the
 // full domain document; lean() reads return plain POJOs including all fields.
+// Every domain document is scoped by `userId` and most by a `date` day-key, so a
+// compound index on both makes the per-user, per-range queries below index-backed
+// instead of collection scans as data grows across users.
 function model(name: string): mongoose.Model<Doc> {
-  return (
-    (mongoose.models[name] as mongoose.Model<Doc>) ||
-    mongoose.model<Doc>(
-      name,
-      new mongoose.Schema(
-        { _id: { type: String } },
-        { strict: false, versionKey: false, collection: name },
-      ),
-    )
+  const existing = mongoose.models[name] as mongoose.Model<Doc> | undefined;
+  if (existing) return existing;
+  const schema = new mongoose.Schema(
+    { _id: { type: String } },
+    { strict: false, versionKey: false, collection: name },
   );
+  schema.index({ userId: 1, date: 1 });
+  return mongoose.model<Doc>(name, schema);
 }
 
 function clean<T extends Doc>(d: unknown): T {
@@ -52,17 +53,24 @@ function clean<T extends Doc>(d: unknown): T {
 function makeCollection<T extends Doc>(name: string): Collection<T> {
   const M = () => model(name);
 
-  const allDocs = async (): Promise<T[]> => {
+  // Load documents, optionally narrowing the DB query with a Mongo filter so we
+  // don't drag the whole (multi-user) collection over the wire. The caller's JS
+  // predicate is still applied afterwards, so results match the local store even
+  // if the filter is looser than the predicate.
+  const load = async (filter?: StoreFilter): Promise<T[]> => {
     await connect();
-    const docs = await M().find().lean();
+    const docs = await M()
+      .find(filter ?? {})
+      .lean();
     return docs as unknown as T[];
   };
 
   return {
-    all: async () => (await allDocs()).map((d) => clean<T>(d)),
-    find: async (pred) => (await allDocs()).filter(pred).map((d) => clean<T>(d)),
-    findOne: async (pred) => {
-      const found = (await allDocs()).find(pred);
+    all: async () => (await load()).map((d) => clean<T>(d)),
+    find: async (pred, filter) =>
+      (await load(filter)).filter(pred).map((d) => clean<T>(d)),
+    findOne: async (pred, filter) => {
+      const found = (await load(filter)).find(pred);
       return found ? clean<T>(found) : null;
     },
     findById: async (id) => {
@@ -82,8 +90,8 @@ function makeCollection<T extends Doc>(name: string): Collection<T> {
         .lean();
       return found ? clean<T>(found) : null;
     },
-    upsert: async (pred, make, patch) => {
-      const docs = await allDocs();
+    upsert: async (pred, make, patch, filter) => {
+      const docs = await load(filter);
       const match = docs.find(pred);
       if (!match) {
         const created = { ...make(), ...patch };
@@ -101,8 +109,8 @@ function makeCollection<T extends Doc>(name: string): Collection<T> {
       const res = await M().findByIdAndDelete(id);
       return !!res;
     },
-    removeWhere: async (pred) => {
-      const docs = await allDocs();
+    removeWhere: async (pred, filter) => {
+      const docs = await load(filter);
       const ids = docs.filter(pred).map((d) => d._id);
       if (ids.length === 0) return 0;
       await connect();
