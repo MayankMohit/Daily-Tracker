@@ -3,30 +3,35 @@
 /* Design tokens (plan §3.6). Light/dark switched via a `data-theme` attribute on
    <html>, so adding more presets later is a config change, not a rewrite. */
 
+/* Monochrome-first palette: neutral grayscale carries structure and emphasis,
+   with color reserved for status (danger/success/warning). The accent is a
+   value, not a hue — near-black in light, near-white in dark — so buttons,
+   focus rings, and chart lines read clean and modern rather than blue/purple. */
+
 :root,
 [data-theme="light"] {
-  --background: #f7f7f8;
+  --background: #fafafa;
   --surface: #ffffff;
-  --surface-2: #f1f1f4;
-  --border: #e4e4e8;
+  --surface-2: #f3f3f5;
+  --border: #e5e5e8;
   --foreground: #18181b;
-  --muted: #6b7280;
-  --accent: #4f46e5;
-  --accent-foreground: #ffffff;
+  --muted: #71717a;
+  --accent: #18181b;
+  --accent-foreground: #fafafa;
   --danger: #dc2626;
   --success: #16a34a;
   --warning: #d97706;
 }
 
 [data-theme="dark"] {
-  --background: #0b0b0e;
-  --surface: #16161a;
-  --surface-2: #1f1f25;
-  --border: #2a2a31;
-  --foreground: #ededf0;
-  --muted: #9ca3af;
-  --accent: #7c7bff;
-  --accent-foreground: #0b0b0e;
+  --background: #000000;
+  --surface: #0e0e10;
+  --surface-2: #1a1a1d;
+  --border: #262629;
+  --foreground: #ededee;
+  --muted: #8a8a90;
+  --accent: #ffffff;
+  --accent-foreground: #0a0a0a;
   --danger: #f87171;
   --success: #4ade80;
   --warning: #fbbf24;

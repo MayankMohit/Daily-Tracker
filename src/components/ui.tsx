@@ -8,8 +8,9 @@ type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md";
 
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-accent-foreground hover:opacity-90",
-  secondary: "bg-surface-2 text-foreground hover:bg-border",
+  primary: "bg-accent text-accent-foreground shadow-sm hover:opacity-90 active:opacity-100",
+  secondary:
+    "border border-border bg-surface-2 text-foreground hover:bg-border hover:text-foreground",
   ghost: "text-muted hover:bg-surface-2 hover:text-foreground",
   danger: "bg-danger/10 text-danger hover:bg-danger/20",
 };

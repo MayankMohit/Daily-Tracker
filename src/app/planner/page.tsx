@@ -2,6 +2,7 @@ import { PageHeader, EmptyState } from "@/components/ui";
 import { PlannerClient } from "@/components/ai/planner-client";
 import { auth } from "@clerk/nextjs/server";
 import { aiConfigured, getCachedPlan } from "@/lib/services/ai";
+import { getUserPrefs } from "@/lib/services/prefs";
 import { getEffectiveToday } from "@/lib/active-day";
 
 export const metadata = { title: "Day Planner" };
@@ -27,15 +28,17 @@ export default async function PlannerPage() {
     );
   }
 
-  const initialPlan = await getCachedPlan(date);
+  const [initialPlan, prefs] = await Promise.all([
+    getCachedPlan(date),
+    getUserPrefs(),
+  ]);
 
   return (
-    <div>
-      <PageHeader
-        title="Day Planner"
-        description="Today's tasks plus anything one-off, time-blocked into a schedule."
-      />
-      <PlannerClient date={date} initialPlan={initialPlan} />
-    </div>
+    <PlannerClient
+      date={date}
+      initialPlan={initialPlan}
+      initialWake={prefs.workingHours.wake}
+      initialSleep={prefs.workingHours.sleep}
+    />
   );
 }

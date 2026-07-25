@@ -28,8 +28,12 @@ function readableText(hex: string): string {
 
 export function HabitChart({ series }: { series: TaskSeries }) {
   const avoid = series.task.goal === "avoid";
-  const color = series.task.color ?? "var(--accent)";
-  const doneText = series.task.color ? readableText(series.task.color) : "#ffffff";
+  // Custom-coloured tasks fill their "done" cells with that hue (auto-contrasting
+  // text). Colourless tasks fall back to a solid foreground swatch — theme-aware
+  // and always legible — rather than the accent, which is near-white in dark mode
+  // and would render invisible white-on-white numbers.
+  const color = series.task.color ?? undefined;
+  const doneText = color ? readableText(color) : undefined;
 
   // The task didn't exist before it was created, so earlier days can't be
   // "missed" — they're greyed like off-days. Compare on the local day the task
@@ -132,10 +136,11 @@ export function HabitChart({ series }: { series: TaskSeries }) {
                   !d.done &&
                   "border border-danger/40 bg-danger/15 text-danger",
                 d.applicable && d.done && "font-semibold",
+                d.applicable && d.done && !color && "bg-foreground text-background",
                 d.newMonth && "ring-1 ring-inset ring-foreground/30",
               )}
               style={
-                d.applicable && d.done
+                d.applicable && d.done && color
                   ? { backgroundColor: color, color: doneText }
                   : undefined
               }
@@ -149,7 +154,10 @@ export function HabitChart({ series }: { series: TaskSeries }) {
       {/* Legend */}
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted">
         <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-[3px]" style={{ backgroundColor: color }} />
+          <span
+            className={cn("h-3 w-3 rounded-[3px]", !color && "bg-foreground")}
+            style={color ? { backgroundColor: color } : undefined}
+          />
           {avoid ? "stayed clean" : "done"}
         </span>
         <span className="flex items-center gap-1.5">

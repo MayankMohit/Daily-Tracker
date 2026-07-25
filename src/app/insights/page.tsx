@@ -7,6 +7,7 @@ import { getTaskSeries, type TaskSeries } from "@/lib/services/analytics";
 import { aiConfigured, getCachedSummary } from "@/lib/services/ai";
 import { AiSummaryCard } from "@/components/ai/ai-summary-card";
 import { auth } from "@clerk/nextjs/server";
+import { getEffectiveToday } from "@/lib/active-day";
 
 export const metadata = { title: "Insights" };
 export const dynamic = "force-dynamic";
@@ -30,7 +31,10 @@ export default async function InsightsPage() {
     );
   }
 
-  const series = await Promise.all(tasks.map((t) => getTaskSeries(t._id, WINDOW)));
+  const today = await getEffectiveToday();
+  const series = await Promise.all(
+    tasks.map((t) => getTaskSeries(t._id, WINDOW, undefined, today)),
+  );
   const taskSeries = series.filter((s): s is TaskSeries => s !== null);
 
   const [cachedDaily, cachedWeekly] = aiConfigured

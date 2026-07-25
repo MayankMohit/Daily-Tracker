@@ -11,7 +11,7 @@ import { db } from "@/lib/store/db";
 import { taskAppliesOn } from "@/lib/recurrence";
 import { indexLogs } from "./logs";
 import { logKey } from "@/lib/keys";
-import { lastNDays, type DayKey } from "@/lib/date";
+import { lastNDays, dayKeyToDate, type DayKey } from "@/lib/date";
 
 export interface TaskSeriesPoint {
   date: DayKey;
@@ -29,18 +29,22 @@ export interface TaskSeries {
   unit?: string;
 }
 
-/** A per-task series over the last N days, aligned to a continuous date axis. */
+/** A per-task series over the last N days, aligned to a continuous date axis.
+ *  `endDay` sets the last day of the window — pass the app's effective "today"
+ *  so the series lines up with the manual day-rollover (defaults to the real
+ *  current day). */
 export async function getTaskSeries(
   taskId: string,
   days = 30,
   userId?: string,
+  endDay?: DayKey,
 ): Promise<TaskSeries | null> {
   userId ??= await resolveUserId();
   const task = await db.tasks.findById(taskId);
   if (!task || task.userId !== userId) return null;
   const logs = await getLogsForTask(taskId, userId);
   const byDate = new Map(logs.map((l) => [l.date, l]));
-  const dates = lastNDays(days);
+  const dates = lastNDays(days, endDay ? dayKeyToDate(endDay) : undefined);
 
   const points: TaskSeriesPoint[] = dates.map((date) => {
     const log = byDate.get(date);

@@ -15,7 +15,6 @@ import {
   monthDayLabel,
   dayNumberLabel,
   dayOfWeek,
-  isToday,
   toDayKey,
   type DayKey,
 } from "@/lib/date";
@@ -52,6 +51,11 @@ export function TaskTable({
   monthNav?: ReactNode;
 }) {
   const router = useRouter();
+  // "Today" is the app's *effective* day (the manual day-rollover can hold it on
+  // the previous date), passed in as the `today` prop — NOT the system clock.
+  // Using `isToday()` here would make the wrong column editable after midnight.
+  // In a past-month view `today` is undefined, so no column is current.
+  const isCurrentDay = (d: DayKey) => (today ? d === today : false);
   // Distinct existing category names, offered as suggestions in the edit form.
   const categories = useMemo(
     () =>
@@ -447,7 +451,7 @@ export function TaskTable({
           <col className="w-[280px]" />
           <col className="w-[52px]" />
           {dates.map((d) => (
-            <col key={d} className={isToday(d) ? "w-[80px]" : undefined} />
+            <col key={d} className={isCurrentDay(d) ? "w-[80px]" : undefined} />
           ))}
         </colgroup>
         <thead>
@@ -466,7 +470,7 @@ export function TaskTable({
               <span className="block font-normal normal-case">(min.)</span>
             </th>
             {dates.map((d, i) => {
-              const today = isToday(d);
+              const current = isCurrentDay(d);
               const dow = dayOfWeek(d);
               const weekend = dow === 0 || dow === 6;
               return (
@@ -474,11 +478,11 @@ export function TaskTable({
                   key={d}
                   ref={(el) => {
                     dateCellRefs.current[i] = el;
-                    if (today) todayCellRef.current = el;
+                    if (current) todayCellRef.current = el;
                   }}
                   className={cn(
                     "px-0 py-1.5 text-center align-middle font-medium leading-tight",
-                    today
+                    current
                       ? "bg-foreground/[0.04]"
                       : weekend
                         ? "bg-surface-2/50"
@@ -488,7 +492,7 @@ export function TaskTable({
                   <div
                     className={cn(
                       "text-[10px] uppercase",
-                      today ? "text-foreground" : "text-muted",
+                      current ? "text-foreground" : "text-muted",
                     )}
                   >
                     {weekdayLabel(d)}
@@ -496,7 +500,7 @@ export function TaskTable({
                   <div
                     className={cn(
                       "mx-auto grid h-6 w-6 place-items-center rounded-full text-xs tabular-nums text-foreground",
-                      today && "font-semibold",
+                      current && "font-semibold",
                     )}
                   >
                     {dayNumberLabel(d)}
@@ -566,7 +570,7 @@ export function TaskTable({
               {dates.map((d) => {
                 const applies = taskAppliesOn(task, d);
                 const value = logs.get(logKey(task._id, d));
-                const isCurrent = isToday(d);
+                const isCurrent = isCurrentDay(d);
                 const dow = dayOfWeek(d);
                 const weekend = dow === 0 || dow === 6;
                 // A day is "past" relative to now. When viewing an earlier month

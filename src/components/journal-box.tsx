@@ -16,7 +16,6 @@ import type { JournalEntry } from "@/lib/types";
 import { api } from "@/lib/client";
 import { dayKeyToDate, type DayKey } from "@/lib/date";
 import { Card, inputClass, Button } from "./ui";
-import { cn } from "@/lib/cn";
 import {
   type KeyEnvelope,
   createEnvelope,
@@ -289,8 +288,14 @@ export function JournalBox({
 
           <textarea
             ref={textareaRef}
-            style={{ height: "80vh" }}
-            className={cn(inputClass, "resize-none py-3 leading-relaxed")}
+            style={{
+              height: "80vh",
+              fontFamily:
+                "var(--font-handwriting), var(--font-geist-sans), ui-sans-serif, system-ui",
+              fontSize: "1.7rem",
+              lineHeight: 1.7,
+            }}
+            className="w-full resize-none rounded-xl border border-border bg-surface px-5 py-4 text-foreground placeholder:text-muted/60 focus:outline-none focus-visible:outline-none focus:border-foreground/40 focus-visible:border-foreground/40"
             placeholder="Start anywhere. A single honest sentence is a whole entry — what lifted you, what weighed on you, what you'd tell yourself tomorrow."
             value={text}
             onChange={(e) => setText(e.target.value)}

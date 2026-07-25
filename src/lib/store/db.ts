@@ -4,7 +4,7 @@
 
 import { nanoid } from "nanoid";
 import { collection } from "./index";
-import { CURRENT_USER_ID, DEFAULT_TIMEZONE } from "@/lib/config";
+import { CURRENT_USER_ID } from "@/lib/config";
 import type {
   Task,
   TaskLog,
@@ -47,7 +47,10 @@ export function defaultUserPrefs(userId = CURRENT_USER_ID): UserPrefs {
     _id: userId,
     userId,
     theme: "system",
-    timezone: DEFAULT_TIMEZONE,
+    // Empty = never chosen. The client auto-detects the browser zone on first
+    // load and saves it (see components/timezone-sync). Until then, day-boundary
+    // logic falls back to DEFAULT_TIMEZONE via `prefs.timezone || …`.
+    timezone: "",
     workingHours: { wake: "07:00", sleep: "23:00" },
     ai: {
       frequency: "daily",

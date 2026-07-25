@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Caveat } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { ThemeProvider, themeInitScript } from "@/components/theme-provider";
 import { Navbar } from "@/components/navbar";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
+import { TimezoneSync } from "@/components/timezone-sync";
 import { APP_NAME } from "@/lib/config";
 import { getActiveDay } from "@/lib/active-day";
 
@@ -15,6 +16,13 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+// Handwriting face for the journal writing surface — warm and personal, while
+// the rest of the app stays on Geist.
+const caveat = Caveat({
+  variable: "--font-handwriting",
   subsets: ["latin"],
 });
 
@@ -38,7 +46,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#4f46e5",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+  ],
 };
 
 export default async function RootLayout({
@@ -55,7 +66,7 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-dvh font-sans antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${caveat.variable} min-h-dvh font-sans antialiased`}
       >
         <ClerkProvider
           signInUrl="/sign-in"
@@ -67,6 +78,7 @@ export default async function RootLayout({
             <Navbar activeDay={activeDay} />
             <main className="w-full px-4 py-6 sm:px-6 lg:px-8">{children}</main>
           </ThemeProvider>
+          <TimezoneSync />
           <ServiceWorkerRegister />
         </ClerkProvider>
       </body>
