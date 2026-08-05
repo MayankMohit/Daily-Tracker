@@ -92,6 +92,23 @@ export interface Collection<T extends Doc> {
   ): Promise<T>;
   remove(id: string): Promise<boolean>;
   removeWhere(pred: (d: T) => boolean, filter?: StoreFilter): Promise<number>;
+  /**
+   * Race-free counter bump for rate limiting. Ensures a doc `id` exists (seeded
+   * from `make()` on first hit), then — only while its `guardField` is still
+   * below `cap` — atomically applies every increment in `inc` and returns the
+   * updated doc. Returns null when the guard already rejects (cap reached), with
+   * no increment applied. `inc` keys may be one-level dot-paths, e.g.
+   * `"callsByFeature.summary"`. Both backends implement this atomically within
+   * their own consistency domain (Mongo via a conditional `$inc`, the local
+   * store within its serialized write).
+   */
+  bumpCounter(
+    id: string,
+    make: () => T,
+    guardField: string,
+    cap: number,
+    inc: Record<string, number>,
+  ): Promise<T | null>;
 }
 
 function makeCollection<T extends Doc>(name: string): Collection<T> {
@@ -153,6 +170,31 @@ function makeCollection<T extends Doc>(name: string): Collection<T> {
         const before = l.length;
         db[name] = l.filter((d) => !pred(d)) as unknown as Doc[];
         return before - db[name].length;
+      }),
+    bumpCounter: (id, make, guardField, cap, inc) =>
+      // The whole check-then-increment runs inside a single serialized mutate,
+      // so it's atomic against other store ops in this process.
+      mutate((db) => {
+        const l = list(db);
+        let idx = l.findIndex((d) => d._id === id);
+        if (idx === -1) {
+          l.push(make());
+          idx = l.length - 1;
+        }
+        const doc = l[idx] as unknown as Record<string, unknown>;
+        if (Number(doc[guardField] ?? 0) >= cap) return null;
+        for (const [pathKey, delta] of Object.entries(inc)) {
+          const dot = pathKey.indexOf(".");
+          if (dot === -1) {
+            doc[pathKey] = Number(doc[pathKey] ?? 0) + delta;
+          } else {
+            const head = pathKey.slice(0, dot);
+            const leaf = pathKey.slice(dot + 1);
+            const nested = (doc[head] ??= {}) as Record<string, unknown>;
+            nested[leaf] = Number(nested[leaf] ?? 0) + delta;
+          }
+        }
+        return clone(l[idx]);
       }),
   };
 }

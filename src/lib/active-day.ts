@@ -35,6 +35,10 @@ export interface ActiveDayState {
   real: DayKey;
   /** True when `effective` is behind `real` — i.e. show "Proceed to next date". */
   held: boolean;
+  /** True while it's still before the 6 PM auto-advance cutoff (user's timezone).
+   *  Gates the "Edit yesterday" affordance — after the cutoff the day advances on
+   *  its own, so reaching back to the previous day is no longer offered. */
+  beforeCutoff: boolean;
 }
 
 /** The current day-key and hour (0–23) in a given IANA timezone. Falls back to
@@ -60,7 +64,7 @@ function nowInZone(now: Date, timeZone: string): { day: DayKey; hour: number } {
 }
 
 /** The calendar day before `day` (pure date-string arithmetic; DST-safe). */
-function prevDayKey(day: DayKey): DayKey {
+export function prevDayKey(day: DayKey): DayKey {
   return toDayKey(addDays(dayKeyToDate(day), -1));
 }
 
@@ -72,6 +76,7 @@ export function computeActiveDay(
 ): ActiveDayState {
   const { day: real, hour } = nowInZone(now, timeZone);
   const yesterday = prevDayKey(real);
+  const beforeCutoff = hour < AUTO_ADVANCE_HOUR;
   const held = cookieVal && DAY_KEY_RE.test(cookieVal) ? cookieVal : null;
 
   let effective: DayKey;
@@ -89,7 +94,7 @@ export function computeActiveDay(
     effective = real;
   }
 
-  return { effective, real, held: effective < real };
+  return { effective, real, held: effective < real, beforeCutoff };
 }
 
 /** The signed-in user's configured timezone (defaults to UTC).

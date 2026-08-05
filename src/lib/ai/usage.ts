@@ -4,10 +4,14 @@
 
 import { db } from "@/lib/store/db";
 import { todayKey } from "@/lib/date";
+import { checkRate, RateLimitError } from "@/lib/rate-limit";
 import { AiError } from "./gemini";
 
 /** Default calls allowed per user per day (override with AI_DAILY_CAP). */
 const DAILY_CAP = Number(process.env.AI_DAILY_CAP || 30);
+/** Short-window burst cap so a runaway loop can't drain the daily quota in one
+ *  go. In-memory + synchronous, so it's genuinely atomic within the process. */
+const PER_MIN_CAP = Number(process.env.AI_PER_MIN_CAP || 5);
 
 function counterId(userId: string, date: string): string {
   return `${userId}|${date}`;
@@ -34,19 +38,25 @@ export async function reserveCall(
   userId: string,
   feature: string,
 ): Promise<void> {
-  const date = todayKey();
-  const id = counterId(userId, date);
-  const existing = await db.aiUsageCounters.findById(id);
-
-  if ((existing?.callsMade ?? 0) >= DAILY_CAP) {
-    throw new AiError(
-      `Daily AI limit reached (${DAILY_CAP} requests). Try again tomorrow.`,
-      429,
-    );
+  // 1) Per-minute burst throttle (in-memory, atomic within the process).
+  try {
+    checkRate(`ai:${userId}`, PER_MIN_CAP, 60_000);
+  } catch (e) {
+    if (e instanceof RateLimitError) {
+      throw new AiError(
+        `Too many AI requests in a short time. Try again in ${e.retryAfter}s.`,
+        429,
+      );
+    }
+    throw e;
   }
 
-  await db.aiUsageCounters.upsert(
-    (c) => c._id === id,
+  // 2) Daily cap — a single atomic conditional increment closes the read-then-
+  //    write race two concurrent calls could otherwise use to slip past the cap.
+  const date = todayKey();
+  const id = counterId(userId, date);
+  const updated = await db.aiUsageCounters.bumpCounter(
+    id,
     () => ({
       _id: id,
       scope: userId,
@@ -54,13 +64,15 @@ export async function reserveCall(
       callsMade: 0,
       callsByFeature: {},
     }),
-    {
-      callsMade: (existing?.callsMade ?? 0) + 1,
-      callsByFeature: {
-        ...(existing?.callsByFeature ?? {}),
-        [feature]: (existing?.callsByFeature?.[feature] ?? 0) + 1,
-      },
-    },
-    { _id: id },
+    "callsMade",
+    DAILY_CAP,
+    { callsMade: 1, [`callsByFeature.${feature}`]: 1 },
   );
+
+  if (!updated) {
+    throw new AiError(
+      `Daily AI limit reached (${DAILY_CAP} requests). Try again tomorrow.`,
+      429,
+    );
+  }
 }

@@ -79,6 +79,11 @@ export interface TaskLogValue {
   kind: TaskLogKind;
   /** kind = "boolean". */
   boolStatus?: boolean;
+  /** kind = "boolean". An explicit "I failed this" mark (rendered as ✗). Purely
+   *  visual — analytics/streaks score it identically to an untracked day (it has
+   *  no `boolStatus`/`percentage`), but unlike an empty day the log is kept so the
+   *  ✗ persists. Lets the user distinguish "failed" from "not done yet". */
+  failed?: boolean;
   /** Capped 0-100. Present for percentage kinds; used for progress bars / cell color. */
   percentage?: number;
   /** Uncapped (e.g. 133). quantity mode only — preserves overachievement for graphs. */
@@ -154,6 +159,21 @@ export interface ExtraActivity {
   estimatedDuration?: number;
   category?: string;
   createdAt: string;
+}
+
+/** A free-form note. Standalone (kept on the /notes page) when `taskId` is
+ *  absent, or attached to a task when set. The body is lightweight markdown —
+ *  bullets (`- `), checklists (`- [ ]` / `- [x]`), `**bold**`, `*italic*`, and
+ *  `# headings` — rendered by a small local parser (no editor dependency). */
+export interface Note {
+  _id: string;
+  userId: string;
+  /** When set, the note belongs to this task; otherwise it's standalone. */
+  taskId?: string;
+  title?: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DailyPlanRequest {

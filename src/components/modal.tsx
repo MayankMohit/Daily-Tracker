@@ -4,17 +4,30 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 
+const SIZE_MAX_W = {
+  sm: "max-w-sm",
+  md: "max-w-md",
+  lg: "max-w-lg",
+  xl: "max-w-xl",
+  "2xl": "max-w-2xl",
+  "3xl": "max-w-3xl",
+  "4xl": "max-w-4xl",
+} as const;
+
 export function Modal({
   open,
   onClose,
   title,
   children,
+  size = "lg",
   className,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  /** Max width of the dialog. Defaults to "lg". */
+  size?: keyof typeof SIZE_MAX_W;
   className?: string;
 }) {
   // Render into <body> via a portal so the overlay sits above the whole app and
@@ -45,7 +58,8 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "my-8 w-full max-w-lg rounded-xl border border-border bg-surface shadow-xl",
+          "my-8 w-full rounded-xl border border-border bg-surface shadow-xl",
+          SIZE_MAX_W[size],
           className,
         )}
         onMouseDown={(e) => e.stopPropagation()}

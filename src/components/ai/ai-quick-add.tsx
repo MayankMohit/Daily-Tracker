@@ -4,7 +4,7 @@
 // water every day"; Gemini drafts a structured task, which the user confirms
 // before it's created. Confirmation keeps the user in control of what's saved.
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Card, inputClass } from "@/components/ui";
 import { Modal } from "@/components/modal";
@@ -47,6 +47,7 @@ export function AiQuickAdd({
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
   const router = useRouter();
 
   async function draftTask() {
@@ -71,7 +72,7 @@ export function AiQuickAdd({
       await api.post("/api/tasks", draft);
       setDraft(null);
       setText("");
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't create the task.");
     } finally {
@@ -164,7 +165,7 @@ export function AiQuickAdd({
               setEditing(false);
               setDraft(null);
               setText("");
-              router.refresh();
+              startTransition(() => router.refresh());
             }}
           />
         </Modal>

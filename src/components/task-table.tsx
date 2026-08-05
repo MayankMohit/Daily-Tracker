@@ -4,7 +4,7 @@
 // first column + header. Cells switch on task type — checkbox (boolean),
 // quantity input vs a target (quantity %), or a 0–100 input (direct %).
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ExtraActivity, MoodLog, Task, TaskLog, TaskLogValue } from "@/lib/types";
 import { api } from "@/lib/client";
@@ -51,6 +51,14 @@ export function TaskTable({
   monthNav?: ReactNode;
 }) {
   const router = useRouter();
+  // Server re-render (after create/edit/delete/reorder) runs inside a transition
+  // so the refresh is non-blocking — the UI stays interactive and shows a pending
+  // state instead of freezing while the RSC payload streams back.
+  const [, startTransition] = useTransition();
+  const refresh = useCallback(
+    () => startTransition(() => router.refresh()),
+    [router],
+  );
   // "Today" is the app's *effective* day (the manual day-rollover can hold it on
   // the previous date), passed in as the `today` prop — NOT the system clock.
   // Using `isToday()` here would make the wrong column editable after midnight.
@@ -206,9 +214,9 @@ export function TaskTable({
       await api.post("/api/tasks/reorder", { ids });
     } catch {
       // Reorder didn't stick — pull the authoritative order back from the server.
-      router.refresh();
+      refresh();
     }
-  }, [router]);
+  }, [refresh]);
 
   // Rounded outline around the current-day column. The non-today date columns
   // flex to fill width, so today's x-offset isn't a fixed value — we measure the
@@ -283,7 +291,13 @@ export function TaskTable({
     async (
       taskId: string,
       date: DayKey,
-      body: { boolStatus?: boolean; actualValue?: number; directPercentage?: number; clear?: boolean },
+      body: {
+        boolStatus?: boolean;
+        failed?: boolean;
+        actualValue?: number;
+        directPercentage?: number;
+        clear?: boolean;
+      },
     ) => {
       const key = logKey(taskId, date);
       // Optimistic: reflect immediately, roll back on failure.
@@ -559,7 +573,7 @@ export function TaskTable({
                     <TaskRowHeader
                       task={task}
                       categories={categories}
-                      onChanged={() => router.refresh()}
+                      onChanged={refresh}
                     />
                   </div>
                 </div>
@@ -833,14 +847,19 @@ function buildTip(
   let detail: string | null = null;
   if (task.type === "boolean") {
     const done = value?.boolStatus ?? false;
+    const failed = value?.failed ?? false;
     status =
       task.goal === "avoid"
         ? done
           ? "Stayed clean"
-          : "Slipped"
+          : failed
+            ? "Slipped"
+            : "No entry"
         : done
           ? "Completed"
-          : "Not completed";
+          : failed
+            ? "Failed"
+            : "Not completed";
   } else if (!value) {
     status = "No entry";
   } else {
@@ -873,6 +892,8 @@ function fmtNum(n: number): string {
 // A single task's 0–1 contribution to a day's completion: boolean is done/not,
 // percentage counts capped progress. Mirrors the server-side rollup in
 // lib/services/analytics so the live chart matches the Insights numbers.
+// A `failed` (✗) log has no `boolStatus`, so it scores 0 — identical to an
+// untracked day (the ✗ is intentionally visual-only).
 function contributionOf(task: Task, v?: TaskLogValue): number {
   if (!v) return 0;
   if (task.type === "boolean") return v.boolStatus ? 1 : 0;
@@ -906,8 +927,9 @@ function pearson(xs: number[], ys: number[]): number | null {
 function cellText(task: Task, v?: TaskLogValue): string {
   if (task.type === "boolean") {
     const done = v?.boolStatus ?? false;
-    if (task.goal === "avoid") return done ? "Stayed clean" : "Slipped";
-    return done ? "Done" : "Missed";
+    const failed = v?.failed ?? false;
+    if (task.goal === "avoid") return done ? "Stayed clean" : failed ? "Slipped" : "No entry";
+    return done ? "Done" : failed ? "Failed" : "Missed";
   }
   if (!v) return "No entry";
   const raw = v.rawPercentage ?? v.percentage ?? 0;
@@ -941,6 +963,15 @@ function ReadonlyCell({
       return (
         <span className="mx-auto grid h-7 w-7 place-items-center">
           <CheckMark className="h-4 w-4 text-foreground" />
+        </span>
+      );
+    }
+    // An explicit ✗ the user set — show it deliberately (same glyph as a derived
+    // miss, but backed by a real log rather than inferred from absence).
+    if (value?.failed) {
+      return (
+        <span className="mx-auto grid h-7 w-7 place-items-center text-danger">
+          <CrossMark className="h-4 w-4" />
         </span>
       );
     }
@@ -1068,6 +1099,22 @@ function CheckMark({ className }: { className?: string }) {
   );
 }
 
+// A thick ✗ for an explicit "failed" mark (currentColor). Same weight/scale as
+// CheckMark so the three-state cell stays visually balanced.
+function CrossMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      <path
+        d="M6 6l12 12M18 6L6 18"
+        stroke="currentColor"
+        strokeWidth={4.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function TaskRowHeader({
   task,
   categories,
@@ -1148,6 +1195,7 @@ function TaskCell({
   value?: TaskLogValue;
   onCommit: (body: {
     boolStatus?: boolean;
+    failed?: boolean;
     actualValue?: number;
     directPercentage?: number;
     clear?: boolean;
@@ -1155,29 +1203,46 @@ function TaskCell({
 }) {
   if (task.type === "boolean") {
     const done = value?.boolStatus ?? false;
+    const failed = value?.failed ?? false;
     const avoid = task.goal === "avoid";
-    // For both goals a checked day is a success; only the framing differs.
+    // Three-state cycle: empty → done (✓) → failed (✗) → empty. `failed` is a
+    // deliberate "I didn't do it" mark; it's stored but scored like an empty day.
+    const next = done
+      ? { failed: true } // done → failed
+      : failed
+        ? { clear: true } // failed → empty
+        : { boolStatus: true }; // empty → done
     const label = avoid
       ? done
-        ? "Stayed clean — tap to mark a slip"
-        : "Mark that you stayed clean today"
+        ? "Stayed clean — tap to mark a slip (✗)"
+        : failed
+          ? "Slipped — tap to clear"
+          : "Mark that you stayed clean today"
       : done
-        ? "Mark not done"
-        : "Mark done";
+        ? "Done — tap to mark failed (✗)"
+        : failed
+          ? "Marked failed — tap to clear"
+          : "Mark done";
     return (
       <button
         type="button"
-        onClick={() => onCommit({ boolStatus: !done })}
+        onClick={() => onCommit(next)}
         aria-label={label}
         title={label}
         className={cn(
           "mx-auto grid h-7 w-7 place-items-center rounded-md border transition-colors",
           done
             ? "border-transparent text-foreground"
-            : "border-border/70 text-transparent hover:border-muted hover:text-muted",
+            : failed
+              ? "border-transparent text-danger"
+              : "border-border/70 text-transparent hover:border-muted hover:text-muted",
         )}
       >
-        <CheckMark className="h-4 w-4" />
+        {failed ? (
+          <CrossMark className="h-4 w-4" />
+        ) : (
+          <CheckMark className="h-4 w-4" />
+        )}
       </button>
     );
   }

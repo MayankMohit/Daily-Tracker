@@ -68,6 +68,15 @@ export function TaskForm({
   const [recurrenceDays, setRecurrenceDays] = useState<number[]>(
     initial?.recurrenceDays ?? [1, 3, 5],
   );
+  const [startDate, setStartDate] = useState(initial?.startDate ?? "");
+  const [endDate, setEndDate] = useState(initial?.endDate ?? "");
+  // For repeating tasks, whether to clip them to a start/end window. One-off
+  // tasks use `startDate` as their single day, so the range toggle is for the
+  // other recurrences only.
+  const [limitRange, setLimitRange] = useState<boolean>(
+    (initial?.recurrence ?? "daily") !== "one-off" &&
+      Boolean(initial?.startDate || initial?.endDate),
+  );
   const [duration, setDuration] = useState<string>(
     initial?.estimatedDuration?.toString() ?? "",
   );
@@ -108,6 +117,10 @@ export function TaskForm({
     }
     if (recurrence === "custom" && recurrenceDays.length === 0)
       return "Pick at least one day for a custom recurrence.";
+    if (recurrence === "one-off" && !startDate)
+      return "Pick the day this one-off task happens.";
+    if (recurrence !== "one-off" && limitRange && startDate && endDate && endDate < startDate)
+      return "End date can't be before the start date.";
     return null;
   }
 
@@ -136,6 +149,20 @@ export function TaskForm({
       estimatedDuration: duration ? Number(duration) : undefined,
       recurrence: recurrence as TaskInput["recurrence"],
       recurrenceDays: recurrence === "custom" ? recurrenceDays : undefined,
+      // One-off: `startDate` is the single day it applies (no end). Repeating:
+      // start/end only when the user opts into a date range.
+      startDate:
+        recurrence === "one-off"
+          ? startDate || undefined
+          : limitRange
+            ? startDate || undefined
+            : undefined,
+      endDate:
+        recurrence === "one-off"
+          ? undefined
+          : limitRange
+            ? endDate || undefined
+            : undefined,
       reminder: reminderOn
         ? { time: reminderTime, days: reminderDays }
         : undefined,
@@ -360,7 +387,12 @@ export function TaskForm({
         <select
           className={inputClass}
           value={recurrence}
-          onChange={(e) => setRecurrence(e.target.value as typeof recurrence)}
+          onChange={(e) => {
+            const r = e.target.value as typeof recurrence;
+            setRecurrence(r);
+            // A one-off needs a day; default it to tomorrow for a sensible start.
+            if (r === "one-off" && !startDate) setStartDate(tomorrowKey());
+          }}
         >
           {RECURRENCES.map((r) => (
             <option key={r.value} value={r.value}>
@@ -372,6 +404,62 @@ export function TaskForm({
 
       {recurrence === "custom" && (
         <DayPicker selected={recurrenceDays} onToggle={(d) => setRecurrenceDays((l) => toggleDay(l, d))} />
+      )}
+
+      {/* Scheduling window. One-off → a single day; other recurrences → an
+          optional start/end range that clips when the task is active. */}
+      {recurrence === "one-off" ? (
+        <Field label="On which day?" hint="Shows only on this date">
+          <div className="flex gap-1.5">
+            <input
+              type="date"
+              className={inputClass}
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setStartDate(tomorrowKey())}
+            >
+              Tomorrow
+            </Button>
+          </div>
+        </Field>
+      ) : (
+        <div className="rounded-lg border border-border p-3">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={limitRange}
+              onChange={(e) => setLimitRange(e.target.checked)}
+            />
+            Limit to a date range
+          </label>
+          {limitRange && (
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Field label="Start" hint="Optional">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={startDate}
+                  max={endDate || undefined}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </Field>
+              <Field label="End" hint="Optional">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={endDate}
+                  min={startDate || undefined}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </Field>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Duration */}
@@ -463,6 +551,16 @@ export function TaskForm({
       </div>
     </form>
   );
+}
+
+/** Local calendar date of tomorrow as a YYYY-MM-DD key, for the date input. */
+function tomorrowKey(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function TypeCard({

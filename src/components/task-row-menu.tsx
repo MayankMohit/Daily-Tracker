@@ -8,6 +8,7 @@ import { api } from "@/lib/client";
 import { cn } from "@/lib/cn";
 import { Modal } from "./modal";
 import { TaskForm } from "./task-form";
+import { TaskNotes } from "./notes/task-notes";
 
 export function TaskRowMenu({
   task,
@@ -21,6 +22,7 @@ export function TaskRowMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   // The menu is rendered as a fixed overlay (not an absolute child) so the
   // table's horizontal scroll container can't clip it. We measure the trigger
@@ -117,6 +119,15 @@ export function TaskRowMenu({
             >
               Edit task
             </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setOpen(false);
+                setNotesOpen(true);
+              }}
+              disabled={busy}
+            >
+              Notes
+            </MenuItem>
             <MenuItem onClick={archive} disabled={busy}>
               Archive
             </MenuItem>
@@ -143,6 +154,14 @@ export function TaskRowMenu({
           }}
         />
       </Modal>
+
+      <Modal
+        open={notesOpen}
+        onClose={() => setNotesOpen(false)}
+        title={`Notes · ${task.title}`}
+      >
+        <TaskNotes taskId={task._id} />
+      </Modal>
     </>
   );
 }
@@ -160,6 +179,8 @@ function taskToInput(task: Task): Partial<TaskInput> {
     estimatedDuration: task.estimatedDuration,
     recurrence: task.recurrence,
     recurrenceDays: task.recurrenceDays,
+    startDate: task.startDate,
+    endDate: task.endDate,
     reminder: task.reminder,
     color: task.color,
   } as Partial<TaskInput>;

@@ -1,4 +1,4 @@
-import { PageHeader, EmptyState } from "@/components/ui";
+import { EmptyState } from "@/components/ui";
 import { PlannerClient } from "@/components/ai/planner-client";
 import { auth } from "@clerk/nextjs/server";
 import { aiConfigured, getCachedPlan } from "@/lib/services/ai";
@@ -20,10 +20,6 @@ export default async function PlannerPage() {
   if (!aiConfigured) {
     return (
       <div>
-        <PageHeader
-          title="Day Planner"
-          description="Ask the AI to time-block your day from your tasks and ad-hoc requirements."
-        />
         <EmptyState
           title="The Day Planner needs a Gemini key"
           description="Add GEMINI_API_KEY to your environment to enable AI time-blocking."

@@ -11,6 +11,7 @@ import {
   ACTIVE_DAY_COOKIE,
   computeActiveDay,
   getActiveTimeZone,
+  prevDayKey,
   type ActiveDayState,
 } from "@/lib/active-day";
 
@@ -34,5 +35,18 @@ export async function advanceActiveDay(): Promise<ActiveDayState> {
   const [jar, timeZone] = await Promise.all([cookies(), getActiveTimeZone()]);
   const { real } = computeActiveDay(jar.get(ACTIVE_DAY_COOKIE)?.value, timeZone);
   jar.set(ACTIVE_DAY_COOKIE, real, COOKIE_OPTS);
-  return { effective: real, real, held: false };
+  // Recompute against the just-written cookie so `beforeCutoff` reflects real time.
+  return computeActiveDay(real, timeZone);
+}
+
+/** Explicit "Edit yesterday" — hold the app on the previous calendar day so its
+ *  cells become editable. Only permitted before the 6 PM cutoff; after that the
+ *  day auto-advances, so this is a no-op that just returns the current state. */
+export async function editPreviousDay(): Promise<ActiveDayState> {
+  const [jar, timeZone] = await Promise.all([cookies(), getActiveTimeZone()]);
+  const state = computeActiveDay(jar.get(ACTIVE_DAY_COOKIE)?.value, timeZone);
+  if (!state.beforeCutoff || state.held) return state;
+  const prev = prevDayKey(state.real);
+  jar.set(ACTIVE_DAY_COOKIE, prev, COOKIE_OPTS);
+  return computeActiveDay(prev, timeZone);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "./ui";
 import { Modal } from "./modal";
@@ -19,6 +19,7 @@ export function NewTaskButton({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [, startTransition] = useTransition();
   const router = useRouter();
 
   return (
@@ -32,7 +33,9 @@ export function NewTaskButton({
           onCancel={() => setOpen(false)}
           onCreated={() => {
             setOpen(false);
-            router.refresh();
+            // Non-blocking refresh: the modal closes instantly and the grid
+            // reconciles in the background instead of freezing the UI.
+            startTransition(() => router.refresh());
           }}
         />
       </Modal>

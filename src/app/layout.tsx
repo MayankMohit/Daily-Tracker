@@ -6,6 +6,7 @@ import { ThemeProvider, themeInitScript } from "@/components/theme-provider";
 import { Navbar } from "@/components/navbar";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { TimezoneSync } from "@/components/timezone-sync";
+import { NoContextMenu } from "@/components/no-context-menu";
 import {
   APP_NAME,
   APP_TAGLINE,
@@ -145,6 +146,7 @@ export default async function RootLayout({
           </ThemeProvider>
           <TimezoneSync />
           <ServiceWorkerRegister />
+          <NoContextMenu />
         </ClerkProvider>
       </body>
     </html>

@@ -65,6 +65,14 @@ export const taskInputSchema = taskInputObjectSchema
   .refine((t) => t.recurrence !== "custom" || (t.recurrenceDays?.length ?? 0) > 0, {
     message: "Pick at least one day for a custom recurrence",
     path: ["recurrenceDays"],
+  })
+  .refine((t) => t.recurrence !== "one-off" || t.startDate !== undefined, {
+    message: "A one-off task needs the day it happens",
+    path: ["startDate"],
+  })
+  .refine((t) => !t.startDate || !t.endDate || t.endDate >= t.startDate, {
+    message: "End date can't be before the start date",
+    path: ["endDate"],
   });
 
 /** Partial variant for PATCH bodies — validates field shapes only; the merged
@@ -78,6 +86,8 @@ export const taskLogInputSchema = z.object({
   taskId: z.string().min(1),
   date: dayKey,
   boolStatus: z.boolean().optional(),
+  /** Boolean tasks only: mark the day as an explicit failure (✗). Visual only. */
+  failed: z.boolean().optional(),
   actualValue: z.number().min(0).optional(),
   directPercentage: z.number().min(0).max(100).optional(),
   /** true clears any logged value for the day. */
@@ -122,6 +132,17 @@ export const extraActivityInputSchema = z.object({
 });
 
 export type ExtraActivityInput = z.infer<typeof extraActivityInputSchema>;
+
+/** Create/update a note. `id` present = update; absent = create. `taskId`
+ *  attaches the note to a task (omitted/empty = standalone). */
+export const noteInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  taskId: z.string().min(1).optional(),
+  title: z.string().max(200).optional().or(z.literal("")),
+  body: z.string().max(20000).default(""),
+});
+
+export type NoteInput = z.infer<typeof noteInputSchema>;
 
 export const userPrefsInputSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),

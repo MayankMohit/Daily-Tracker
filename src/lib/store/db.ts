@@ -20,6 +20,7 @@ import type {
   PushSubscriptionDoc,
   AiUsageCounter,
   UserPrefs,
+  Note,
 } from "@/lib/types";
 
 export function newId(): string {
@@ -40,6 +41,7 @@ export const db = {
   pushSubscriptions: collection<PushSubscriptionDoc>("pushSubscriptions"),
   aiUsageCounters: collection<AiUsageCounter>("aiUsageCounters"),
   userPrefs: collection<UserPrefs>("userPrefs"),
+  notes: collection<Note>("notes"),
 };
 
 /** Default preferences used when a user has never saved settings. */

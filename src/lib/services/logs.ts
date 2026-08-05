@@ -16,6 +16,9 @@ import { logKey } from "@/lib/keys";
 
 function computeValue(task: Task, input: TaskLogInput): TaskLogValue {
   if (task.type === "boolean") {
+    // An explicit ✗ is stored (boolStatus false, failed true) so it survives
+    // `isEmpty`; a plain uncheck (boolStatus false, no failed) still clears.
+    if (input.failed) return { kind: "boolean", boolStatus: false, failed: true };
     return { kind: "boolean", boolStatus: input.boolStatus ?? false };
   }
   const cfg = task.percentageConfig!;
@@ -37,9 +40,10 @@ function computeValue(task: Task, input: TaskLogInput): TaskLogValue {
   };
 }
 
-/** True when a value means "nothing tracked" and the log should be removed. */
+/** True when a value means "nothing tracked" and the log should be removed. A
+ *  ✗ (failed) is a deliberate mark, so it is NOT empty even though it isn't done. */
 function isEmpty(v: TaskLogValue): boolean {
-  if (v.kind === "boolean") return !v.boolStatus;
+  if (v.kind === "boolean") return !v.boolStatus && !v.failed;
   return (v.percentage ?? 0) === 0 && (v.actualValue ?? 0) === 0;
 }
 

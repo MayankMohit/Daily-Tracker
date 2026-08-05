@@ -10,7 +10,7 @@
 // even as the user travels. A per-browser localStorage flag skips the network
 // round-trip on every subsequent load.
 
-import { useEffect } from "react";
+import { useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client";
 import type { UserPrefs } from "@/lib/types";
@@ -19,6 +19,7 @@ const FLAG = "tzAutoDetected";
 
 export function TimezoneSync() {
   const router = useRouter();
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
     if (localStorage.getItem(FLAG)) return;
@@ -37,7 +38,7 @@ export function TimezoneSync() {
         if (!prefs.timezone) {
           await api.patch("/api/prefs", { timezone: zone });
           // Re-render server components so the day boundary uses the new zone.
-          router.refresh();
+          startTransition(() => router.refresh());
         }
         // Only mark done on success — a failure here (not signed in yet on an
         // auth page, offline) should retry on a later load, not be swallowed.

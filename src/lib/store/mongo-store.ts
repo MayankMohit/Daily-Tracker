@@ -117,6 +117,28 @@ function makeCollection<T extends Doc>(name: string): Collection<T> {
       const res = await M().deleteMany({ _id: { $in: ids } });
       return res.deletedCount ?? ids.length;
     },
+    bumpCounter: async (id, make, guardField, cap, inc) => {
+      await connect();
+      // Seed the counter on first hit without disturbing existing values. `_id`
+      // comes from the filter on insert, so it's excluded from $setOnInsert.
+      const { _id: _omit, ...seed } = make() as Doc & Record<string, unknown>;
+      void _omit;
+      await M().updateOne(
+        { _id: id },
+        { $setOnInsert: seed },
+        { upsert: true },
+      );
+      // Atomic conditional increment: the filter only matches while still under
+      // the cap, so concurrent calls can't push past it (unlike read-then-write).
+      const updated = await M()
+        .findOneAndUpdate(
+          { _id: id, [guardField]: { $lt: cap } },
+          { $inc: inc },
+          { returnDocument: "after" },
+        )
+        .lean();
+      return updated ? clean<T>(updated) : null;
+    },
   };
 }
 

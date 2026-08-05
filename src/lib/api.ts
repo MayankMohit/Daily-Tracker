@@ -4,13 +4,27 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { z } from "zod";
+import { checkRate, RateLimitError } from "@/lib/rate-limit";
+
+// General per-user burst cap applied to every API route (AI routes add their own
+// per-minute + daily caps on top). Tunable via env for tighter/looser policies.
+const API_RATE_LIMIT = Number(process.env.API_RATE_LIMIT || 60);
+const API_RATE_WINDOW_MS = Number(process.env.API_RATE_WINDOW_MS || 10_000);
 
 export function ok<T>(data: T, init?: ResponseInit) {
   return NextResponse.json({ ok: true, data }, init);
 }
 
-export function fail(message: string, status = 400, details?: unknown) {
-  return NextResponse.json({ ok: false, error: message, details }, { status });
+export function fail(
+  message: string,
+  status = 400,
+  details?: unknown,
+  headers?: HeadersInit,
+) {
+  return NextResponse.json(
+    { ok: false, error: message, details },
+    { status, headers },
+  );
 }
 
 /** Parse+validate a JSON request body, returning either data or a 400 response. */
@@ -47,8 +61,15 @@ export function handler<A extends unknown[]>(
     try {
       const { userId } = await auth();
       if (!userId) return fail("Unauthorized", 401);
+      // Per-user burst throttle across all API routes.
+      checkRate(`api:${userId}`, API_RATE_LIMIT, API_RATE_WINDOW_MS);
       return await fn(...args);
     } catch (err) {
+      if (err instanceof RateLimitError) {
+        return fail(err.message, 429, undefined, {
+          "Retry-After": String(err.retryAfter),
+        });
+      }
       const message =
         err instanceof Error ? err.message : "Unexpected server error";
       return fail(message, 500);
