@@ -27,9 +27,30 @@ const NAV = [
   { href: "/settings", label: "Settings" },
 ];
 
-export function Navbar({ activeDay }: { activeDay: ActiveDayState }) {
+export function Navbar({
+  activeDay,
+  pinEnabled = false,
+}: {
+  activeDay: ActiveDayState;
+  /** Whether the app-lock PIN is on — shows a "Lock now" button. */
+  pinEnabled?: boolean;
+}) {
   const pathname = usePathname();
   const { isSignedIn } = useAuth();
+
+  // Track enable/disable done in Settings so the lock button appears/disappears
+  // without a full reload (Settings broadcasts these events).
+  const [locking, setLocking] = useState(pinEnabled);
+  useEffect(() => {
+    const on = () => setLocking(true);
+    const off = () => setLocking(false);
+    window.addEventListener("pin:enabled", on);
+    window.addEventListener("pin:disabled", off);
+    return () => {
+      window.removeEventListener("pin:enabled", on);
+      window.removeEventListener("pin:disabled", off);
+    };
+  }, []);
 
   // Hide the nav on the auth pages — they render Clerk's own centered card.
   if (pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up")) {
@@ -70,6 +91,29 @@ export function Navbar({ activeDay }: { activeDay: ActiveDayState }) {
         <div className="ml-auto flex items-center gap-3">
           <DayControl initial={activeDay} />
           <ThemeToggle />
+          {isSignedIn && locking && (
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("pin:lock"))}
+              title="Lock the app now"
+              aria-label="Lock the app now"
+              className="grid h-8 w-8 place-items-center rounded-md text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+                aria-hidden
+              >
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </button>
+          )}
           {isSignedIn ? (
             <UserButton appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
           ) : (

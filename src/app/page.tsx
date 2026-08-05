@@ -6,6 +6,7 @@ import { AiQuickAdd } from "@/components/ai/ai-quick-add";
 import { aiConfigured } from "@/lib/services/ai";
 import { listTasks } from "@/lib/services/tasks";
 import { getLogsInRange } from "@/lib/services/logs";
+import { noteCountsByTask } from "@/lib/services/notes";
 import {
   getExtraActivities,
   getExtraActivitiesInRange,
@@ -38,12 +39,13 @@ export default async function DashboardPage({
   const from = dates[0];
   const to = dates[dates.length - 1];
 
-  const [tasks, logs, extras, monthExtras, moods] = await Promise.all([
+  const [tasks, logs, extras, monthExtras, moods, noteCounts] = await Promise.all([
     listTasks(),
     getLogsInRange(from, to),
     getExtraActivities(today),
     getExtraActivitiesInRange(from, to),
     getMoodsInRange(from, to),
+    noteCountsByTask(),
   ]);
 
   const categories = Array.from(
@@ -82,6 +84,7 @@ export default async function DashboardPage({
           initialExtras={isCurrentMonth ? extras : []}
           monthExtras={monthExtras}
           initialMoods={moods}
+          noteCounts={noteCounts}
           categories={categories}
           today={isCurrentMonth ? today : undefined}
           monthNav={<MonthNav viewMonth={viewMonth} isCurrent={isCurrentMonth} />}

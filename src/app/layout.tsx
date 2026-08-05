@@ -1,12 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Caveat } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 import "./globals.css";
 import { ThemeProvider, themeInitScript } from "@/components/theme-provider";
 import { Navbar } from "@/components/navbar";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { TimezoneSync } from "@/components/timezone-sync";
 import { NoContextMenu } from "@/components/no-context-menu";
+import { PinGate } from "@/components/pin/pin-gate";
+import { isPinEnabled } from "@/lib/services/pin";
 import {
   APP_NAME,
   APP_TAGLINE,
@@ -107,6 +110,19 @@ export default async function RootLayout({
 }>) {
   const activeDay = await getActiveDay();
 
+  // Whether this user has the app-lock PIN on. Resolved server-side so the lock
+  // screen is in the initial HTML (no flash of app content before it mounts).
+  // `auth()` throws on requests the proxy matcher doesn't cover (static assets,
+  // the web manifest, …), which the root layout also renders — so degrade to
+  // "off" there rather than crash the whole render (mirrors getActiveTimeZone).
+  let pinEnabled = false;
+  try {
+    const { userId } = await auth();
+    pinEnabled = userId ? await isPinEnabled(userId) : false;
+  } catch {
+    pinEnabled = false;
+  }
+
   // Rich-result structured data: tells search engines this is a free web app in
   // the productivity category. Rendered server-side so crawlers see it in the
   // initial HTML on the public entry pages.
@@ -141,9 +157,12 @@ export default async function RootLayout({
           signUpFallbackRedirectUrl="/"
         >
           <ThemeProvider>
-            <Navbar activeDay={activeDay} />
+            <Navbar activeDay={activeDay} pinEnabled={pinEnabled} />
             <main className="w-full px-4 py-6 sm:px-6 lg:px-8">{children}</main>
           </ThemeProvider>
+          {/* Only renders a screen when the PIN is on; `pinEnabled` is derived
+              from the signed-in user, and PinGate also self-hides if signed out. */}
+          <PinGate initialEnabled={pinEnabled} />
           <TimezoneSync />
           <ServiceWorkerRegister />
           <NoContextMenu />

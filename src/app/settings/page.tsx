@@ -1,4 +1,5 @@
 import { SettingsForm } from "@/components/settings-form";
+import { PinSettings } from "@/components/pin/pin-settings";
 import { ExportPanel } from "@/components/export-panel";
 import { getUserPrefs } from "@/lib/services/prefs";
 import { auth } from "@clerk/nextjs/server";
@@ -18,6 +19,7 @@ export default async function SettingsPage() {
     <div className="mx-auto max-w-2xl">
       <div className="space-y-4">
         <SettingsForm initial={prefs} />
+        <PinSettings />
         <ExportPanel />
       </div>
     </div>

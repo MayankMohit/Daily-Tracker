@@ -144,6 +144,18 @@ export const noteInputSchema = z.object({
 
 export type NoteInput = z.infer<typeof noteInputSchema>;
 
+// App-lock PIN (privacy layer over Clerk). Exactly four digits — validated the
+// same way on the client input and the server route.
+const pin4 = z.string().regex(/^\d{4}$/, "Enter a 4-digit PIN");
+
+/** Set (first-time enable) or verify/unlock: just the PIN. */
+export const pinSchema = z.object({ pin: pin4 });
+export type PinInput = z.infer<typeof pinSchema>;
+
+/** Change an existing PIN: prove the current one, then set the new one. */
+export const pinChangeSchema = z.object({ current: pin4, pin: pin4 });
+export type PinChangeInput = z.infer<typeof pinChangeSchema>;
+
 export const userPrefsInputSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),
   timezone: z.string().optional(),

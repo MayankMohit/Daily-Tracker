@@ -176,6 +176,20 @@ export interface Note {
   updatedAt: string;
 }
 
+/** A user's app-lock PIN (an optional privacy layer on top of Clerk auth). The
+ *  PIN itself is never stored — only a scrypt hash + its salt, server-side. The
+ *  mere existence of this doc means the lock is enabled; only a derived
+ *  `{ enabled }` boolean is ever exposed to the client, never these fields. */
+export interface PinLockDoc {
+  _id: string; // userId
+  userId: string;
+  /** scrypt(pin, salt) as hex. */
+  hash: string;
+  /** Random per-user salt (hex) for `hash`. */
+  salt: string;
+  updatedAt: string;
+}
+
 export interface DailyPlanRequest {
   _id: string;
   userId: string;

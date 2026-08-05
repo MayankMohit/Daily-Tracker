@@ -14,11 +14,17 @@ export function TaskRowMenu({
   task,
   categories = [],
   onChanged,
+  noteCount = 0,
+  onNoteCountChange,
 }: {
   task: Task;
   /** Existing category names offered as suggestions in the edit form. */
   categories?: string[];
   onChanged: () => void;
+  /** Number of notes attached to this task, shown as a badge. */
+  noteCount?: number;
+  /** Notified when the count changes (note added/removed in the dialog). */
+  onNoteCountChange?: (count: number) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -90,7 +96,19 @@ export function TaskRowMenu({
   }
 
   return (
-    <>
+    <div className="flex shrink-0 items-center gap-0.5">
+      {noteCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setNotesOpen(true)}
+          title={`${noteCount} note${noteCount === 1 ? "" : "s"}`}
+          aria-label={`${noteCount} note${noteCount === 1 ? "" : "s"} — open notes`}
+          className="flex h-6 shrink-0 items-center gap-0.5 rounded px-1 text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+        >
+          <NoteIcon className="h-3.5 w-3.5" />
+          <span className="text-xs tabular-nums">{noteCount}</span>
+        </button>
+      )}
       <button
         ref={btnRef}
         type="button"
@@ -160,9 +178,9 @@ export function TaskRowMenu({
         onClose={() => setNotesOpen(false)}
         title={`Notes · ${task.title}`}
       >
-        <TaskNotes taskId={task._id} />
+        <TaskNotes taskId={task._id} onCountChange={onNoteCountChange} />
       </Modal>
-    </>
+    </div>
   );
 }
 
@@ -184,6 +202,26 @@ function taskToInput(task: Task): Partial<TaskInput> {
     reminder: task.reminder,
     color: task.color,
   } as Partial<TaskInput>;
+}
+
+// A small document/note glyph (currentColor) for the row's note-count badge.
+function NoteIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={className}
+    >
+      <path d="M4 4h11l5 5v11a0 0 0 0 1 0 0H4a0 0 0 0 1 0 0z" />
+      <path d="M14 4v5h5" />
+      <path d="M8 13h6M8 17h4" />
+    </svg>
+  );
 }
 
 function MenuItem({

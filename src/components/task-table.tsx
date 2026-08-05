@@ -32,6 +32,7 @@ export function TaskTable({
   initialExtras = [],
   monthExtras = [],
   initialMoods = [],
+  noteCounts: initialNoteCounts = {},
   categories: categoryList = [],
   today,
   monthNav,
@@ -45,6 +46,8 @@ export function TaskTable({
   monthExtras?: ExtraActivity[];
   /** The viewed month's mood logs, powering the mood chart + correlation. */
   initialMoods?: MoodLog[];
+  /** Attached-note count per task id, powering the row's note badge. */
+  noteCounts?: Record<string, number>;
   categories?: string[];
   today?: DayKey;
   /** Month pager, rendered inline in the "Task" header cell. */
@@ -77,6 +80,15 @@ export function TaskTable({
     for (const l of initialLogs) m.set(logKey(l.taskId, l.date), l.value);
     return m;
   });
+
+  // Attached-note counts per task id. Seeded from the server and updated live as
+  // notes are added/removed in a row's Notes dialog, so the badge stays accurate
+  // without a full table refresh.
+  const [noteCounts, setNoteCounts] =
+    useState<Record<string, number>>(initialNoteCounts);
+  const setNoteCount = useCallback((taskId: string, count: number) => {
+    setNoteCounts((m) => ({ ...m, [taskId]: count }));
+  }, []);
 
   const [extras, setExtras] = useState<ExtraActivity[]>(initialExtras);
   const [exDesc, setExDesc] = useState("");
@@ -574,6 +586,8 @@ export function TaskTable({
                       task={task}
                       categories={categories}
                       onChanged={refresh}
+                      noteCount={noteCounts[task._id] ?? 0}
+                      onNoteCountChange={(c) => setNoteCount(task._id, c)}
                     />
                   </div>
                 </div>
@@ -1119,10 +1133,14 @@ function TaskRowHeader({
   task,
   categories,
   onChanged,
+  noteCount,
+  onNoteCountChange,
 }: {
   task: Task;
   categories: string[];
   onChanged: () => void;
+  noteCount: number;
+  onNoteCountChange: (count: number) => void;
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
@@ -1173,7 +1191,13 @@ function TaskRowHeader({
           )}
         </div>
       </div>
-      <TaskRowMenu task={task} categories={categories} onChanged={onChanged} />
+      <TaskRowMenu
+        task={task}
+        categories={categories}
+        onChanged={onChanged}
+        noteCount={noteCount}
+        onNoteCountChange={onNoteCountChange}
+      />
     </div>
   );
 }

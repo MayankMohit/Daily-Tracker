@@ -21,6 +21,7 @@ import type {
   AiUsageCounter,
   UserPrefs,
   Note,
+  PinLockDoc,
 } from "@/lib/types";
 
 export function newId(): string {
@@ -42,6 +43,7 @@ export const db = {
   aiUsageCounters: collection<AiUsageCounter>("aiUsageCounters"),
   userPrefs: collection<UserPrefs>("userPrefs"),
   notes: collection<Note>("notes"),
+  pinLocks: collection<PinLockDoc>("pinLocks"),
 };
 
 /** Default preferences used when a user has never saved settings. */

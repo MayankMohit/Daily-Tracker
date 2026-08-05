@@ -62,6 +62,13 @@ body {
   color: var(--foreground);
 }
 
+/* Wrong-PIN nudge on the app-lock screen (used via animate-[shake_…]). */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
 /* Thin, unobtrusive scrollbars for the wide task table. */
 * {
   scrollbar-width: thin;
