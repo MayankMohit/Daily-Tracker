@@ -156,8 +156,22 @@ export type PinInput = z.infer<typeof pinSchema>;
 export const pinChangeSchema = z.object({ current: pin4, pin: pin4 });
 export type PinChangeInput = z.infer<typeof pinChangeSchema>;
 
+export const appearanceInputSchema = z
+  .object({
+    palette: z.enum(["default", "slate", "warm", "forest", "rose"]),
+    accent: z.enum(["mono", "blue", "violet", "green", "amber", "rose"]),
+    corners: z.enum(["sharp", "rounded", "round"]),
+    density: z.enum(["compact", "comfortable", "cozy"]),
+    background: z.object({
+      preset: z.string().max(40),
+      overlay: z.number().min(0).max(1),
+    }),
+  })
+  .partial();
+
 export const userPrefsInputSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),
+  appearance: appearanceInputSchema.optional(),
   timezone: z.string().optional(),
   workingHours: z
     .object({ wake: z.string(), sleep: z.string() })

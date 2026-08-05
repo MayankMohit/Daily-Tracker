@@ -5,24 +5,28 @@
 // New users start with an empty `timezone` pref (see store/db `defaultUserPrefs`).
 // On first load we detect the browser's IANA zone and save it — once — so the
 // manual day-rollover (day boundary + 6 PM cutoff) lines up with the user's real
-// clock without them having to open Settings. We only ever write when the stored
-// zone is still empty, so a deliberate choice (including UTC) is never clobbered,
-// even as the user travels. A per-browser localStorage flag skips the network
-// round-trip on every subsequent load.
+// clock without them having to open Settings.
+//
+// We key the "already detected?" decision off the *server* value for the signed-in
+// user (passed in from the layout, which already loads prefs), NOT a per-browser
+// localStorage flag. A browser-scoped flag was account-blind: once any account on a
+// device had been detected, a freshly created account in the same browser was
+// skipped and left with an empty zone. Reading the server value makes this correct
+// per account, and it self-limits — once the zone is saved the prop is non-empty on
+// the next render, so this never patches again (a deliberate choice, including UTC,
+// is likewise preserved because the prop is then non-empty).
 
 import { useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client";
-import type { UserPrefs } from "@/lib/types";
 
-const FLAG = "tzAutoDetected";
-
-export function TimezoneSync() {
+export function TimezoneSync({ timezone }: { timezone: string }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
   useEffect(() => {
-    if (localStorage.getItem(FLAG)) return;
+    // Already set (this account, on the server) — nothing to detect or save.
+    if (timezone) return;
 
     let zone = "";
     try {
@@ -34,20 +38,15 @@ export function TimezoneSync() {
 
     (async () => {
       try {
-        const prefs = await api.get<UserPrefs>("/api/prefs");
-        if (!prefs.timezone) {
-          await api.patch("/api/prefs", { timezone: zone });
-          // Re-render server components so the day boundary uses the new zone.
-          startTransition(() => router.refresh());
-        }
-        // Only mark done on success — a failure here (not signed in yet on an
-        // auth page, offline) should retry on a later load, not be swallowed.
-        localStorage.setItem(FLAG, "1");
+        await api.patch("/api/prefs", { timezone: zone });
+        // Re-render server components so the day boundary uses the new zone (and
+        // so `timezone` comes back non-empty, stopping this from running again).
+        startTransition(() => router.refresh());
       } catch {
-        /* retry on a future load */
+        // Not signed in yet (auth page), offline, etc. — retry on a future load.
       }
     })();
-  }, [router]);
+  }, [timezone, router]);
 
   return null;
 }

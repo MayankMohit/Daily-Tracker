@@ -52,6 +52,13 @@ export function defaultUserPrefs(userId = CURRENT_USER_ID): UserPrefs {
     _id: userId,
     userId,
     theme: "system",
+    appearance: {
+      palette: "default",
+      accent: "mono",
+      corners: "rounded",
+      density: "comfortable",
+      background: { preset: "none", overlay: 0.85 },
+    },
     // Empty = never chosen. The client auto-detects the browser zone on first
     // load and saves it (see components/timezone-sync). Until then, day-boundary
     // logic falls back to DEFAULT_TIMEZONE via `prefs.timezone || …`.
@@ -72,6 +79,11 @@ export function defaultUserPrefs(userId = CURRENT_USER_ID): UserPrefs {
 export const getUserPrefs = cache(
   async (userId = CURRENT_USER_ID): Promise<UserPrefs> => {
     const existing = await db.userPrefs.findById(userId);
-    return existing ?? defaultUserPrefs(userId);
+    if (!existing) return defaultUserPrefs(userId);
+    // Backfill `appearance` for docs saved before the field existed, so every
+    // consumer (layout, provider, settings) can rely on the full shape.
+    return existing.appearance
+      ? existing
+      : { ...existing, appearance: defaultUserPrefs(userId).appearance };
   },
 );

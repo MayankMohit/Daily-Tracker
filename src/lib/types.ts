@@ -244,10 +244,34 @@ export type AiTone = "encouraging" | "neutral" | "blunt";
 export type AiFrequency = "daily" | "daily+weekly" | "off";
 export type ThemeChoice = "light" | "dark" | "system";
 
+// UI customization layered on top of the light/dark `theme` (all expressed as
+// `data-*` attributes / CSS vars on <html>, so they compose with the mode).
+export type PaletteChoice = "default" | "slate" | "warm" | "forest" | "rose";
+export type AccentChoice =
+  | "mono"
+  | "blue"
+  | "violet"
+  | "green"
+  | "amber"
+  | "rose";
+export type CornerChoice = "sharp" | "rounded" | "round";
+export type DensityChoice = "compact" | "comfortable" | "cozy";
+
+export interface Appearance {
+  palette: PaletteChoice;
+  accent: AccentChoice;
+  corners: CornerChoice;
+  density: DensityChoice;
+  /** Background scenery. `preset` "none" = solid theme background; `overlay` is
+   *  0..1, how strongly the theme colour scrims over the pattern (readability). */
+  background: { preset: string; overlay: number };
+}
+
 export interface UserPrefs {
   _id: string; // userId
   userId: string;
   theme: ThemeChoice;
+  appearance: Appearance;
   timezone: string;
   /** Day Planner window, e.g. { wake: "07:00", sleep: "23:00" }. */
   workingHours: { wake: string; sleep: string };

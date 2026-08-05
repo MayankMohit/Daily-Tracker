@@ -22,10 +22,20 @@ export async function saveUserPrefs(
   userId ??= await resolveUserId();
   const parsed = userPrefsInputSchema.parse(input);
   const current = await getUserPrefsRaw(userId);
+  // Backfill `appearance` for docs saved before it existed (default shape).
+  const baseAppearance = current.appearance ?? defaultUserPrefs(userId).appearance;
 
   const next: UserPrefs = {
     ...current,
     theme: parsed.theme ?? current.theme,
+    appearance: {
+      ...baseAppearance,
+      ...parsed.appearance,
+      background: {
+        ...baseAppearance.background,
+        ...parsed.appearance?.background,
+      },
+    },
     timezone: parsed.timezone ?? current.timezone,
     workingHours: parsed.workingHours ?? current.workingHours,
     ai: { ...current.ai, ...parsed.ai },

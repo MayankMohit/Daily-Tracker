@@ -9,10 +9,13 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   useCallback,
 } from "react";
-import type { ThemeChoice } from "@/lib/types";
+import type { Appearance, ThemeChoice } from "@/lib/types";
+import { api } from "@/lib/client";
+import { isPhotoPreset, photoFile, photoUrl } from "@/lib/backgrounds";
 
 const STORAGE_KEY = "dt-theme";
 
@@ -25,6 +28,40 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+interface AppearanceContextValue {
+  appearance: Appearance;
+  /** Patch one or more appearance fields; applies live and saves (debounced). */
+  setAppearance: (patch: Partial<Appearance>) => void;
+}
+
+const AppearanceContext = createContext<AppearanceContextValue | null>(null);
+
+/** Reflect the appearance onto <html> as the attributes/vars the CSS keys off. */
+function applyAppearance(a: Appearance) {
+  const el = document.documentElement;
+  el.setAttribute("data-palette", a.palette);
+  el.setAttribute("data-accent", a.accent);
+  el.setAttribute("data-corners", a.corners);
+  el.setAttribute("data-density", a.density);
+  el.style.setProperty("--bg-overlay", String(a.background.overlay));
+
+  // Gradient presets are driven by CSS `[data-bg="…"]`; photos are set inline
+  // (the CSS can't know the file names). Clear any inline image when switching
+  // back to a gradient/none so the CSS rule wins again.
+  const preset = a.background.preset;
+  if (isPhotoPreset(preset)) {
+    el.setAttribute("data-bg", "photo");
+    el.style.setProperty("--bg-image", `url("${photoUrl(photoFile(preset))}")`);
+    el.style.setProperty("--bg-size", "cover");
+    el.style.setProperty("--bg-repeat", "no-repeat");
+  } else {
+    el.setAttribute("data-bg", preset);
+    el.style.removeProperty("--bg-image");
+    el.style.removeProperty("--bg-size");
+    el.style.removeProperty("--bg-repeat");
+  }
+}
 
 function systemPrefersDark(): boolean {
   return (
@@ -49,9 +86,17 @@ export const themeInitScript = `
 })();
 `;
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({
+  children,
+  initialAppearance,
+}: {
+  children: React.ReactNode;
+  /** Server-resolved appearance (already rendered onto <html>) — avoids a flash. */
+  initialAppearance: Appearance;
+}) {
   const [choice, setChoiceState] = useState<ThemeChoice>("system");
   const [resolved, setResolved] = useState<"light" | "dark">("light");
+  const [appearance, setAppearanceState] = useState<Appearance>(initialAppearance);
 
   // Read persisted choice on mount.
   useEffect(() => {
@@ -79,11 +124,50 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setChoiceState(c);
   }, []);
 
+  // Apply appearance to <html> and persist changes (debounced). The initial run
+  // just re-sets the attributes the server already rendered (no-op) and skips the
+  // save — we only PATCH on an actual user change.
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const mounted = useRef(false);
+  useEffect(() => {
+    applyAppearance(appearance);
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      api.patch("/api/prefs", { appearance }).catch(() => {
+        /* transient — the next change re-saves; UI already reflects the choice */
+      });
+    }, 400);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [appearance]);
+
+  const setAppearance = useCallback((patch: Partial<Appearance>) => {
+    setAppearanceState((prev) => ({
+      ...prev,
+      ...patch,
+      background: { ...prev.background, ...patch.background },
+    }));
+  }, []);
+
   return (
     <ThemeContext.Provider value={{ choice, resolved, setChoice }}>
-      {children}
+      <AppearanceContext.Provider value={{ appearance, setAppearance }}>
+        {children}
+      </AppearanceContext.Provider>
     </ThemeContext.Provider>
   );
+}
+
+export function useAppearance(): AppearanceContextValue {
+  const ctx = useContext(AppearanceContext);
+  if (!ctx)
+    throw new Error("useAppearance must be used within <ThemeProvider>");
+  return ctx;
 }
 
 export function useTheme(): ThemeContextValue {

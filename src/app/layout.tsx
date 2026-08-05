@@ -10,6 +10,8 @@ import { TimezoneSync } from "@/components/timezone-sync";
 import { NoContextMenu } from "@/components/no-context-menu";
 import { PinGate } from "@/components/pin/pin-gate";
 import { isPinEnabled } from "@/lib/services/pin";
+import { getUserPrefs, defaultUserPrefs } from "@/lib/store/db";
+import { isPhotoPreset, photoFile, photoUrl } from "@/lib/backgrounds";
 import {
   APP_NAME,
   APP_TAGLINE,
@@ -115,10 +117,23 @@ export default async function RootLayout({
   // `auth()` throws on requests the proxy matcher doesn't cover (static assets,
   // the web manifest, …), which the root layout also renders — so degrade to
   // "off" there rather than crash the whole render (mirrors getActiveTimeZone).
+  // Appearance is resolved server-side too, so its attributes are in the initial
+  // HTML — the customized look paints immediately with no flash of the default.
   let pinEnabled = false;
+  let appearance = defaultUserPrefs().appearance;
+  // Empty until the user has a saved zone; drives first-load auto-detection in
+  // <TimezoneSync>, keyed to this account's server value (not a per-browser flag).
+  let timezone = "";
   try {
     const { userId } = await auth();
-    pinEnabled = userId ? await isPinEnabled(userId) : false;
+    if (userId) {
+      pinEnabled = await isPinEnabled(userId);
+      // `getUserPrefs` is request-cached and already loaded via getActiveDay, so
+      // this reuses that read rather than hitting the store again.
+      const prefs = await getUserPrefs(userId);
+      appearance = prefs.appearance;
+      timezone = prefs.timezone;
+    }
   } catch {
     pinEnabled = false;
   }
@@ -137,8 +152,32 @@ export default async function RootLayout({
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
   };
 
+  // Photos render via an inline `--bg-image` (CSS gradients render via `data-bg`);
+  // set it server-side so a photo background is correct on first paint too.
+  const bg = appearance.background;
+  const photo = isPhotoPreset(bg.preset);
+  const htmlStyle = {
+    "--bg-overlay": String(bg.overlay),
+    ...(photo
+      ? {
+          "--bg-image": `url("${photoUrl(photoFile(bg.preset))}")`,
+          "--bg-size": "cover",
+          "--bg-repeat": "no-repeat",
+        }
+      : {}),
+  } as React.CSSProperties;
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      data-palette={appearance.palette}
+      data-accent={appearance.accent}
+      data-corners={appearance.corners}
+      data-density={appearance.density}
+      data-bg={photo ? "photo" : bg.preset}
+      style={htmlStyle}
+    >
       <head>
         {/* Set the theme before first paint to avoid a flash of the wrong theme. */}
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
@@ -156,14 +195,14 @@ export default async function RootLayout({
           signInFallbackRedirectUrl="/"
           signUpFallbackRedirectUrl="/"
         >
-          <ThemeProvider>
+          <ThemeProvider initialAppearance={appearance}>
             <Navbar activeDay={activeDay} pinEnabled={pinEnabled} />
             <main className="w-full px-4 py-6 sm:px-6 lg:px-8">{children}</main>
           </ThemeProvider>
           {/* Only renders a screen when the PIN is on; `pinEnabled` is derived
               from the signed-in user, and PinGate also self-hides if signed out. */}
           <PinGate initialEnabled={pinEnabled} />
-          <TimezoneSync />
+          <TimezoneSync timezone={timezone} />
           <ServiceWorkerRegister />
           <NoContextMenu />
         </ClerkProvider>

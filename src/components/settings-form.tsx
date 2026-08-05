@@ -9,6 +9,7 @@ import type { UserPrefs } from "@/lib/types";
 import { api } from "@/lib/client";
 import { Card, Field, inputClass, Button } from "./ui";
 import { ThemeToggle } from "./theme-toggle";
+import { AppearanceSettings } from "./appearance-settings";
 
 export function SettingsForm({ initial }: { initial: UserPrefs }) {
   const [timezone, setTimezone] = useState(initial.timezone);
@@ -48,6 +49,9 @@ export function SettingsForm({ initial }: { initial: UserPrefs }) {
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted">Theme</span>
           <ThemeToggle />
+        </div>
+        <div className="border-t border-border pt-4">
+          <AppearanceSettings />
         </div>
       </Card>
 
