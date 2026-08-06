@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "./ui";
 import { Modal } from "./modal";
 import { TaskForm } from "./task-form";
+import { emitTaskCreated } from "@/lib/task-events";
 
 export function NewTaskButton({
   variant = "primary",
@@ -31,10 +32,11 @@ export function NewTaskButton({
         <TaskForm
           categories={categories}
           onCancel={() => setOpen(false)}
-          onCreated={() => {
+          onCreated={(task) => {
             setOpen(false);
-            // Non-blocking refresh: the modal closes instantly and the grid
-            // reconciles in the background instead of freezing the UI.
+            // Show the new row instantly: the table splices in this task from the
+            // broadcast, then the non-blocking refresh reconciles the full list.
+            emitTaskCreated(task);
             startTransition(() => router.refresh());
           }}
         />

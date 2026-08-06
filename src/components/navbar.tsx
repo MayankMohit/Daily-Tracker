@@ -381,9 +381,17 @@ function DayControl({ initial }: { initial: ActiveDayState }) {
           onClick={proceed}
           disabled={busy}
           title={`Move to ${nextLabel}. Do this once you're done logging ${heldLabel}.`}
-          className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-50 sm:px-3 sm:py-1.5"
         >
-          {busy ? "Advancing…" : "Proceed to next date →"}
+          {busy ? (
+            "Advancing…"
+          ) : (
+            <>
+              {/* Shorter label on phones where header space is tight. */}
+              <span className="sm:hidden">Next day →</span>
+              <span className="hidden sm:inline">Proceed to next date →</span>
+            </>
+          )}
         </button>
       </div>
     );

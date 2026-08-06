@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type 
 import { useRouter } from "next/navigation";
 import type { ExtraActivity, MoodLog, Task, TaskLog, TaskLogValue } from "@/lib/types";
 import { api } from "@/lib/client";
+import { onTaskCreated } from "@/lib/task-events";
 import { logKey } from "@/lib/keys";
 import { taskAppliesOn } from "@/lib/recurrence";
 import {
@@ -99,6 +100,12 @@ export function TaskTable({
       Array.from(
         new Set(tasks.map((t) => t.category).filter((c): c is string => !!c)),
       ).sort(),
+    [tasks],
+  );
+  // Task lookup by id, so a cell edit can compute its optimistic value (which
+  // depends on the task's type + percentage config) without a server round-trip.
+  const taskById = useMemo(
+    () => new Map(tasks.map((t) => [t._id, t])),
     [tasks],
   );
   const [logs, setLogs] = useState<Map<string, TaskLogValue>>(() => {
@@ -207,6 +214,30 @@ export function TaskTable({
     setSyncedFrom(tasks);
     setOrder(tasks);
   }
+
+  // Optimistic task mutations. Create/edit/delete each update this local `order`
+  // *immediately* so the row appears / changes / vanishes on the same tick, then
+  // the caller's `router.refresh()` streams the authoritative list back and the
+  // sync-during-render above replaces `order` with it. These only touch local
+  // state — refreshing is left to the caller so it happens *after* the write
+  // commits (refreshing first would re-read the server before the change landed).
+  const optimisticUpsert = useCallback((task: Task) => {
+    setOrder((list) => {
+      const i = list.findIndex((t) => t._id === task._id);
+      if (i === -1) return [...list, task];
+      const next = list.slice();
+      next[i] = task;
+      return next;
+    });
+  }, []);
+  const optimisticRemove = useCallback((taskId: string) => {
+    setOrder((list) => list.filter((t) => t._id !== taskId));
+  }, []);
+
+  // A task created by the page-level "New task" button or AI quick-add (which
+  // live outside this table) is broadcast so it shows here without waiting for
+  // the refresh round-trip. The full refresh still follows and reconciles.
+  useEffect(() => onTaskCreated(optimisticUpsert), [optimisticUpsert]);
 
   // `dragId` is the row being dragged; `handleId` gates HTML5 dragging so a row
   // is only draggable while its grip is held (keeps inputs/buttons usable).
@@ -373,8 +404,20 @@ export function TaskTable({
       },
     ) => {
       const key = logKey(taskId, date);
-      // Optimistic: reflect immediately, roll back on failure.
       const prev = logs.get(key);
+      // Optimistic: paint the new tick/✗/percentage immediately so the cell
+      // responds on tap, instead of waiting for the server round-trip. The server
+      // response then reconciles to the authoritative value; a failure rolls back.
+      const task = taskById.get(taskId);
+      if (task) {
+        const optimistic = optimisticLogValue(task, body, prev);
+        setLogs((m) => {
+          const next = new Map(m);
+          if (optimistic) next.set(key, optimistic);
+          else next.delete(key);
+          return next;
+        });
+      }
       try {
         const log = await api.post<TaskLog | null>("/api/task-logs", {
           taskId,
@@ -396,7 +439,7 @@ export function TaskTable({
         });
       }
     },
-    [logs],
+    [logs, taskById],
   );
 
   // Extra activities grouped by day for the chart hover. Past days come from the
@@ -663,6 +706,8 @@ export function TaskTable({
                       task={task}
                       categories={categories}
                       onChanged={refresh}
+                      onOptimisticUpsert={optimisticUpsert}
+                      onOptimisticRemove={optimisticRemove}
                       noteCount={noteCounts[task._id] ?? 0}
                       onNoteCountChange={(c) => setNoteCount(task._id, c)}
                     />
@@ -1018,6 +1063,51 @@ function fmtNum(n: number): string {
 }
 
 // A single task's 0–1 contribution to a day's completion: boolean is done/not,
+// The local value a cell edit should show immediately, matching what the server
+// will persist — so the tick/✗/percentage flips on tap rather than after the
+// network round-trip. The server response still replaces this with the
+// authoritative value on success (and a failure rolls back to `prev`).
+function optimisticLogValue(
+  task: Task,
+  body: {
+    boolStatus?: boolean;
+    failed?: boolean;
+    actualValue?: number;
+    directPercentage?: number;
+    clear?: boolean;
+  },
+  prev?: TaskLogValue,
+): TaskLogValue | null {
+  if (body.clear) return null;
+  if (task.type === "boolean") {
+    if (body.boolStatus) return { kind: "boolean", boolStatus: true };
+    if (body.failed) return { kind: "boolean", failed: true };
+    return prev ?? null;
+  }
+  const cfg = task.percentageConfig;
+  if (cfg?.mode === "quantity" && body.actualValue != null) {
+    const target = cfg.targetValue ?? 0;
+    const raw = target > 0 ? (body.actualValue / target) * 100 : 0;
+    return {
+      kind: "quantity",
+      actualValue: body.actualValue,
+      rawPercentage: raw,
+      percentage: Math.min(100, raw),
+      targetValueSnapshot: cfg.targetValue,
+      unitSnapshot: cfg.unit?.value,
+    };
+  }
+  if (body.directPercentage != null) {
+    const raw = body.directPercentage;
+    return {
+      kind: "direct_percentage",
+      percentage: Math.min(100, raw),
+      rawPercentage: raw,
+    };
+  }
+  return prev ?? null;
+}
+
 // percentage counts capped progress. Mirrors the server-side rollup in
 // lib/services/analytics so the live chart matches the Insights numbers.
 // A `failed` (✗) log has no `boolStatus`, so it scores 0 — identical to an
@@ -1247,12 +1337,16 @@ function TaskRowHeader({
   task,
   categories,
   onChanged,
+  onOptimisticUpsert,
+  onOptimisticRemove,
   noteCount,
   onNoteCountChange,
 }: {
   task: Task;
   categories: string[];
   onChanged: () => void;
+  onOptimisticUpsert: (task: Task) => void;
+  onOptimisticRemove: (taskId: string) => void;
   noteCount: number;
   onNoteCountChange: (count: number) => void;
 }) {
@@ -1309,6 +1403,8 @@ function TaskRowHeader({
         task={task}
         categories={categories}
         onChanged={onChanged}
+        onOptimisticUpsert={onOptimisticUpsert}
+        onOptimisticRemove={onOptimisticRemove}
         noteCount={noteCount}
         onNoteCountChange={onNoteCountChange}
       />

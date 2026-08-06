@@ -10,6 +10,7 @@ import { useRef, useState } from "react";
 import { api } from "@/lib/client";
 import type { Note } from "@/lib/types";
 import { Button, inputClass } from "@/components/ui";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { cn } from "@/lib/cn";
 import { NoteMarkdown, toggleChecklistLine } from "./note-markdown";
 
@@ -56,6 +57,7 @@ export function NoteEditor({
   const [body, setBody] = useState(note?.body ?? "");
   const [tab, setTab] = useState<"write" | "preview">("write");
   const [status, setStatus] = useState<Status>("idle");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const areaRef = useRef<HTMLTextAreaElement>(null);
 
   async function save(nextBody = body, nextTitle = title) {
@@ -79,12 +81,19 @@ export function NoteEditor({
     }
   }
 
-  async function remove() {
+  // The Delete button: an unsaved note has nothing to confirm — just clear it.
+  // A saved note opens a confirmation dialog first.
+  function requestDelete() {
     if (!current) {
       onDeleted?.("");
       return;
     }
-    if (!window.confirm("Delete this note? This can't be undone.")) return;
+    setConfirmDelete(true);
+  }
+
+  async function remove() {
+    setConfirmDelete(false);
+    if (!current) return;
     try {
       await api.del(`/api/notes/${current._id}`);
       onDeleted?.(current._id);
@@ -318,13 +327,23 @@ export function NoteEditor({
       )}
 
       <div className="flex justify-between">
-        <Button variant="ghost" size="sm" onClick={remove}>
+        <Button variant="ghost" size="sm" onClick={requestDelete}>
           Delete
         </Button>
         <Button size="sm" onClick={() => save()}>
           Save
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={remove}
+        title="Delete note?"
+        message="Delete this note? This can't be undone."
+        confirmLabel="Delete"
+        danger
+      />
     </div>
   );
 }

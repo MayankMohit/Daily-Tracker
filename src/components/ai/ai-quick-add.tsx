@@ -11,6 +11,8 @@ import { Modal } from "@/components/modal";
 import { TaskForm } from "@/components/task-form";
 import { api } from "@/lib/client";
 import type { TaskInput } from "@/lib/schemas";
+import type { Task } from "@/lib/types";
+import { emitTaskCreated } from "@/lib/task-events";
 
 function chips(t: TaskInput): string[] {
   const bits: string[] = [
@@ -69,9 +71,10 @@ export function AiQuickAdd({
     setSaving(true);
     setError(null);
     try {
-      await api.post("/api/tasks", draft);
+      const created = await api.post<Task>("/api/tasks", draft);
       setDraft(null);
       setText("");
+      emitTaskCreated(created);
       startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't create the task.");
@@ -158,10 +161,11 @@ export function AiQuickAdd({
             initial={draft}
             categories={categories}
             onCancel={() => setEditing(false)}
-            onCreated={() => {
+            onCreated={(task) => {
               setEditing(false);
               setDraft(null);
               setText("");
+              emitTaskCreated(task);
               startTransition(() => router.refresh());
             }}
           />

@@ -7,6 +7,7 @@
 import { useMemo, useState } from "react";
 import { api } from "@/lib/client";
 import type { TaskInput } from "@/lib/schemas";
+import type { Task } from "@/lib/types";
 import { UNIT_GROUPS } from "@/lib/units";
 import {
   PRIORITIES,
@@ -33,7 +34,9 @@ export function TaskForm({
   taskId?: string;
   /** Existing category names to offer in the dropdown. */
   categories?: string[];
-  onCreated: () => void;
+  /** Called after a successful create/edit, with the task the server saved so
+   *  callers can reflect it optimistically (splice into a list, close a modal). */
+  onCreated: (task: Task) => void;
   onCancel: () => void;
 }) {
   const editing = taskId !== undefined;
@@ -171,12 +174,10 @@ export function TaskForm({
     };
 
     try {
-      if (editing) {
-        await api.patch(`/api/tasks/${taskId}`, payload);
-      } else {
-        await api.post("/api/tasks", payload);
-      }
-      onCreated();
+      const saved = editing
+        ? await api.patch<Task>(`/api/tasks/${taskId}`, payload)
+        : await api.post<Task>("/api/tasks", payload);
+      onCreated(saved);
     } catch (e) {
       setError(
         e instanceof Error

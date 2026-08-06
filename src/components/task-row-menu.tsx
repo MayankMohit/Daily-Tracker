@@ -7,6 +7,7 @@ import type { TaskInput } from "@/lib/schemas";
 import { api } from "@/lib/client";
 import { cn } from "@/lib/cn";
 import { Modal } from "./modal";
+import { ConfirmDialog } from "./confirm-dialog";
 import { TaskForm } from "./task-form";
 import { TaskNotes } from "./notes/task-notes";
 
@@ -14,6 +15,8 @@ export function TaskRowMenu({
   task,
   categories = [],
   onChanged,
+  onOptimisticUpsert,
+  onOptimisticRemove,
   noteCount = 0,
   onNoteCountChange,
 }: {
@@ -21,6 +24,10 @@ export function TaskRowMenu({
   /** Existing category names offered as suggestions in the edit form. */
   categories?: string[];
   onChanged: () => void;
+  /** Reflect an edit in the parent table immediately (before the refresh). */
+  onOptimisticUpsert?: (task: Task) => void;
+  /** Drop the row from the parent table immediately (before the refresh). */
+  onOptimisticRemove?: (taskId: string) => void;
   /** Number of notes attached to this task, shown as a badge. */
   noteCount?: number;
   /** Notified when the count changes (note added/removed in the dialog). */
@@ -29,7 +36,7 @@ export function TaskRowMenu({
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   // The menu is rendered as a fixed overlay (not an absolute child) so the
   // table's horizontal scroll container can't clip it. We measure the trigger
   // on open and anchor the menu to its bottom-right corner.
@@ -68,30 +75,25 @@ export function TaskRowMenu({
   }, [open]);
 
   async function archive() {
-    setBusy(true);
+    // Drop the row now; the delete runs in the background. On success we refresh
+    // to reconcile, and on failure we also refresh — pulling the task back from
+    // the server since the optimistic removal didn't stick.
+    setOpen(false);
+    onOptimisticRemove?.(task._id);
     try {
       await api.del(`/api/tasks/${task._id}`);
-      onChanged();
     } finally {
-      setBusy(false);
-      setOpen(false);
+      onChanged();
     }
   }
 
   async function remove() {
-    if (
-      !window.confirm(
-        `Delete "${task.title}" and all its history? This can't be undone.`,
-      )
-    )
-      return;
-    setBusy(true);
+    setConfirmDelete(false);
+    onOptimisticRemove?.(task._id);
     try {
       await api.del(`/api/tasks/${task._id}?hard=1`);
-      onChanged();
     } finally {
-      setBusy(false);
-      setOpen(false);
+      onChanged();
     }
   }
 
@@ -133,7 +135,6 @@ export function TaskRowMenu({
                 setOpen(false);
                 setEditing(true);
               }}
-              disabled={busy}
             >
               Edit task
             </MenuItem>
@@ -142,14 +143,17 @@ export function TaskRowMenu({
                 setOpen(false);
                 setNotesOpen(true);
               }}
-              disabled={busy}
             >
               Notes
             </MenuItem>
-            <MenuItem onClick={archive} disabled={busy}>
-              Archive
-            </MenuItem>
-            <MenuItem onClick={remove} disabled={busy} danger>
+            <MenuItem onClick={archive}>Archive</MenuItem>
+            <MenuItem
+              onClick={() => {
+                setOpen(false);
+                setConfirmDelete(true);
+              }}
+              danger
+            >
               Delete permanently
             </MenuItem>
           </div>,
@@ -166,12 +170,29 @@ export function TaskRowMenu({
           initial={taskToInput(task)}
           categories={categories}
           onCancel={() => setEditing(false)}
-          onCreated={() => {
+          onCreated={(saved) => {
             setEditing(false);
+            // Reflect the edit in the row instantly, then reconcile via refresh.
+            onOptimisticUpsert?.(saved);
             onChanged();
           }}
         />
       </Modal>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={remove}
+        title="Delete task?"
+        message={
+          <>
+            Delete <span className="font-medium text-foreground">{task.title}</span>{" "}
+            and all its history? This can&apos;t be undone.
+          </>
+        }
+        confirmLabel="Delete"
+        danger
+      />
 
       <Modal
         open={notesOpen}

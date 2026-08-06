@@ -102,3 +102,14 @@ export function EmptyState({
     </div>
   );
 }
+
+/** A muted, pulsing placeholder block for loading skeletons. Size it with
+ *  `className` (width/height/rounding). Purely decorative — hidden from a11y. */
+export function Skeleton({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={cn("animate-pulse rounded-md bg-surface-2", className)}
+    />
+  );
+}
