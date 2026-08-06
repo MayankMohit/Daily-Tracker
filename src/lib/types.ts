@@ -187,6 +187,13 @@ export interface PinLockDoc {
   hash: string;
   /** Random per-user salt (hex) for `hash`. */
   salt: string;
+  /** scrypt(recoveryCode, resetSalt) as hex. Lets the user reset a forgotten PIN
+   *  by proving a code they saved at enable time — the raw code is never stored.
+   *  Optional so PINs created before this feature keep working (backfilled on the
+   *  next setPin/regenerate). */
+  resetHash?: string;
+  /** Random per-user salt (hex) for `resetHash`. */
+  resetSalt?: string;
   updatedAt: string;
 }
 

@@ -156,6 +156,19 @@ export type PinInput = z.infer<typeof pinSchema>;
 export const pinChangeSchema = z.object({ current: pin4, pin: pin4 });
 export type PinChangeInput = z.infer<typeof pinChangeSchema>;
 
+/** Turn the lock off — must prove it, either with the current PIN (Settings
+ *  "turn off") or the saved recovery code (lock-screen "forgot PIN"). Requiring
+ *  one of the two is what stops a token-less reset by whoever holds the session. */
+export const pinDisableSchema = z
+  .object({
+    pin: pin4.optional(),
+    resetToken: z.string().trim().min(16).max(128).optional(),
+  })
+  .refine((d) => Boolean(d.pin) || Boolean(d.resetToken), {
+    message: "Enter your PIN or recovery code",
+  });
+export type PinDisableInput = z.infer<typeof pinDisableSchema>;
+
 export const appearanceInputSchema = z
   .object({
     palette: z.enum(["default", "slate", "warm", "forest", "rose"]),

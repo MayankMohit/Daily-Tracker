@@ -133,12 +133,14 @@ export function PinGate({ initialEnabled }: { initialEnabled: boolean }) {
   if (isSignedIn === false) return null;
   if (!enabled || !locked) return null;
 
-  return <LockScreen onUnlock={unlock} onReset={onDisabledBroadcast} />;
+  return <LockScreen onUnlock={unlock} onReset={resetWithCode} />;
 }
 
-// Reset (forgot PIN) both clears the server PIN and tells the rest of the app.
-async function onDisabledBroadcast() {
-  await api.del("/api/pin");
+// Reset (forgot PIN) proves ownership with the saved recovery code, then clears
+// the server PIN and tells the rest of the app. Without the code the server
+// refuses — so whoever holds the session can't clear the lock in a click.
+async function resetWithCode(code: string) {
+  await api.del("/api/pin", { resetToken: code });
   window.dispatchEvent(new Event("pin:disabled"));
 }
 
@@ -147,7 +149,7 @@ function LockScreen({
   onReset,
 }: {
   onUnlock: () => void;
-  onReset: () => Promise<void>;
+  onReset: (code: string) => Promise<void>;
 }) {
   // One real input drives four presentational boxes. A single input avoids the
   // per-box focus juggling (and the password-manager autofill that hijacks it),
@@ -156,6 +158,10 @@ function LockScreen({
   const [error, setError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const [shake, setShake] = useState(false);
+  // "Forgot PIN?" opens an inline recovery-code prompt rather than resetting
+  // outright — the code (saved when the lock was enabled) is what authorizes it.
+  const [resetOpen, setResetOpen] = useState(false);
+  const [code, setCode] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   // Guards against a double-submit while a verify request is in flight. A ref (not
   // state) so it never disables the input — disabling it mid-request is what left
@@ -200,18 +206,19 @@ function LockScreen({
     if (next.length === 4) submit(next);
   }
 
-  async function forgot() {
-    if (
-      !window.confirm(
-        "Reset your PIN? This turns the app lock off. You can set a new PIN in Settings.",
-      )
-    )
-      return;
+  async function submitReset(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    setError(null);
     setResetting(true);
     try {
-      await onReset();
-    } catch {
-      setError("Couldn't reset. Please try again.");
+      await onReset(trimmed);
+      // Success dispatches `pin:disabled`, which unmounts this screen.
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Couldn't reset — check the code.",
+      );
       setResetting(false);
     }
   }
@@ -269,14 +276,64 @@ function LockScreen({
           {error && <span className="text-danger">{error}</span>}
         </div>
 
-        <button
-          type="button"
-          onClick={forgot}
-          disabled={resetting}
-          className="text-xs text-muted underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
-        >
-          Forgot PIN? Reset it
-        </button>
+        {resetOpen ? (
+          <form onSubmit={submitReset} className="space-y-2 text-left">
+            <label className="block space-y-1">
+              <span className="text-xs text-muted">
+                Enter the recovery code you saved when you turned on the lock.
+              </span>
+              <input
+                type="text"
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                data-1p-ignore
+                data-lpignore="true"
+                value={code}
+                onChange={(e) => {
+                  setCode(e.target.value);
+                  setError(null);
+                }}
+                placeholder="Recovery code"
+                aria-label="Recovery code"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-foreground/60"
+              />
+            </label>
+            <div className="flex justify-center gap-2">
+              <button
+                type="submit"
+                disabled={resetting || !code.trim()}
+                className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background disabled:opacity-50"
+              >
+                {resetting ? "Resetting…" : "Reset lock"}
+              </button>
+              <button
+                type="button"
+                disabled={resetting}
+                onClick={() => {
+                  setResetOpen(false);
+                  setCode("");
+                  setError(null);
+                }}
+                className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setResetOpen(true);
+              setError(null);
+            }}
+            className="text-xs text-muted underline-offset-2 hover:text-foreground hover:underline"
+          >
+            Forgot PIN?
+          </button>
+        )}
       </div>
     </div>
   );

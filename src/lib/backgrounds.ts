@@ -1,13 +1,3 @@
-// Curated photo backgrounds.
-//
-// To add one: drop the image file into `public/backgrounds/` and add an entry to
-// PHOTO_BACKGROUNDS below — nothing else is needed. It then shows up as a tile in
-// Settings → Appearance → Background, and selecting it sets the page background.
-//
-// Photos are stored in prefs as `photo:<file>` (vs. the CSS-gradient presets like
-// "aurora"), and rendered by setting `--bg-image` inline on <html> — so, unlike the
-// gradients, they don't need a CSS rule per image.
-
 export interface PhotoBackground {
   /** File name inside `public/backgrounds/` (e.g. "sunrise.jpg"). */
   file: string;
