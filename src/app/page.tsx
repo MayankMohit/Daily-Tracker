@@ -53,15 +53,20 @@ export default async function DashboardPage({
   ).sort();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {aiConfigured ? (
         <AiQuickAdd
           categories={categories}
-          action={<NewTaskButton categories={categories} />}
+          action={
+            <NewTaskButton
+              categories={categories}
+              className="h-9 w-full px-4 sm:w-auto"
+            />
+          }
         />
       ) : (
         <div className="flex justify-end">
-          <NewTaskButton categories={categories} />
+          <NewTaskButton categories={categories} className="h-9 px-4" />
         </div>
       )}
 

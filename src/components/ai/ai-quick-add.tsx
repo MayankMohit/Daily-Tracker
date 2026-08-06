@@ -81,31 +81,28 @@ export function AiQuickAdd({
   }
 
   return (
-    <Card className="space-y-3 p-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="group relative flex-1">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted transition-colors group-focus-within:text-accent">
-            ✨
-          </span>
-          <input
-            className={`${inputClass} h-11 pl-9`}
-            placeholder="Describe a task — e.g. “read 30 pages every weekday at 9pm”"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && draftTask()}
-            disabled={loading || saving}
-          />
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <Button
-            className="h-11"
-            onClick={draftTask}
-            disabled={loading || saving || !text.trim()}
-          >
-            {loading ? "Drafting…" : "Draft with AI"}
-          </Button>
-          {action}
-        </div>
+    <Card className="space-y-2.5 p-2.5">
+      {/* Mobile: input + Draft on row 1, New task full-width below. Desktop
+          (sm+): the New task button reverts to auto width and sits inline, so
+          all three share one row exactly as before. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          className={`${inputClass} h-9 min-w-0 flex-1`}
+          placeholder="Describe a task"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && draftTask()}
+          disabled={loading || saving}
+        />
+        <Button
+          size="sm"
+          className="h-9 shrink-0"
+          onClick={draftTask}
+          disabled={loading || saving || !text.trim()}
+        >
+          {loading ? "Drafting…" : "Draft with AI"}
+        </Button>
+        {action}
       </div>
 
       {error && <p className="text-sm text-danger">{error}</p>}

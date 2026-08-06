@@ -25,6 +25,22 @@ import { MonthlyTrendChart, type TrendPoint } from "./charts/monthly-trend-chart
 import { MoodTrendChart, type MoodTrendPoint } from "./charts/mood-trend-chart";
 import { MoodInsight, type MoodInsightData } from "./mood-insight";
 
+// True on narrow (phone) viewports — below Tailwind's `sm` breakpoint (640px).
+// Drives the table's collapse to a single today column and the charts' reflow to
+// full width. Starts `false` so the first client render matches the server (no
+// hydration mismatch), then syncs after mount and on viewport changes.
+function useIsMobile(): boolean {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const update = () => setMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return mobile;
+}
+
 export function TaskTable({
   tasks,
   dates,
@@ -67,6 +83,16 @@ export function TaskTable({
   // Using `isToday()` here would make the wrong column editable after midnight.
   // In a past-month view `today` is undefined, so no column is current.
   const isCurrentDay = (d: DayKey) => (today ? d === today : false);
+  // On phones the full month grid doesn't fit, so the table collapses to just
+  // today's editable column; the whole-month history still lives in the charts
+  // below (which reflow to full width). Desktop is untouched (`columnDates` ===
+  // `dates`). Past-month views (no `today`) keep every column and scroll.
+  const isMobile = useIsMobile();
+  // Collapse to a single column only when there *is* a today to show (current
+  // month). Past-month mobile views keep the full scrolling grid + aligned
+  // charts, since there's no single day to focus.
+  const collapsed = isMobile && Boolean(today);
+  const columnDates = collapsed ? dates.filter((d) => d === today) : dates;
   // Distinct existing category names, offered as suggestions in the edit form.
   const categories = useMemo(
     () =>
@@ -234,6 +260,7 @@ export function TaskTable({
   // flex to fill width, so today's x-offset isn't a fixed value — we measure the
   // live cell and render one absolute overlay over the full column height.
   const tableRef = useRef<HTMLTableElement>(null);
+  const scrollCardRef = useRef<HTMLDivElement>(null);
   const todayCellRef = useRef<HTMLTableCellElement>(null);
   const taskRowsEndRef = useRef<HTMLTableRowElement>(null);
   // One ref per date header cell, so the monthly chart below can align each of
@@ -252,6 +279,19 @@ export function TaskTable({
     plotRight: number;
     centers: number[];
   } | null>(null);
+  // Mobile chart geometry: the table above shows only today's column, so the
+  // charts can't borrow its per-day centres. Instead we spread the whole month
+  // evenly across the card's visible width (with a small left gutter for the
+  // axis labels). Same shape as `chartGeom` so the charts stay unchanged.
+  const [mobileGeom, setMobileGeom] = useState<{
+    width: number;
+    plotLeft: number;
+    plotRight: number;
+    centers: number[];
+  } | null>(null);
+  // The geometry the charts actually plot against — table-aligned on desktop,
+  // full-width even spread when collapsed to today on mobile.
+  const activeGeom = collapsed ? mobileGeom : chartGeom;
   useEffect(() => {
     const measure = () => {
       const table = tableRef.current;
@@ -288,6 +328,27 @@ export function TaskTable({
         plotRight: last ? last.right - t.left : t.width,
         centers,
       });
+
+      // Mobile: even spread of the whole month across the card's visible width.
+      // `padL` leaves room for the axis labels (%, mood emoji) drawn to the left
+      // of the first point; `padR` keeps the last point off the right edge.
+      const card = scrollCardRef.current;
+      if (card) {
+        const w = card.clientWidth;
+        const padL = 34;
+        const padR = 12;
+        const plotLeft = padL;
+        const plotRight = Math.max(padL + 1, w - padR);
+        const n = dates.length;
+        const mCenters = dates.map((_, i) =>
+          n <= 1
+            ? (plotLeft + plotRight) / 2
+            : plotLeft + (i / (n - 1)) * (plotRight - plotLeft),
+        );
+        setMobileGeom({ width: w, plotLeft, plotRight, centers: mCenters });
+      } else {
+        setMobileGeom(null);
+      }
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -297,7 +358,7 @@ export function TaskTable({
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [order, dates]);
+  }, [order, dates, collapsed]);
 
   const commit = useCallback(
     async (
@@ -393,7 +454,7 @@ export function TaskTable({
           };
         }
         return {
-          x: chartGeom?.centers[i] ?? 0,
+          x: activeGeom?.centers[i] ?? 0,
           value,
           label: monthDayLabel(d),
           weekday: weekdayLabel(d),
@@ -401,20 +462,20 @@ export function TaskTable({
           detail,
         };
       }),
-    [dates, order, logs, today, chartGeom, extrasByDate],
+    [dates, order, logs, today, activeGeom, extrasByDate],
   );
 
   // Mood plotted on the same column grid as the completion trend.
   const moodTrendPoints = useMemo<MoodTrendPoint[]>(
     () =>
       dates.map((d, i) => ({
-        x: chartGeom?.centers[i] ?? 0,
+        x: activeGeom?.centers[i] ?? 0,
         mood: moods.get(d) ?? null,
         label: monthDayLabel(d),
         weekday: weekdayLabel(d),
         isToday: today ? d === today : false,
       })),
-    [dates, moods, chartGeom, today],
+    [dates, moods, activeGeom, today],
   );
 
   // Pair each day's mood with its completion to read the mood↔productivity link.
@@ -456,6 +517,7 @@ export function TaskTable({
   return (
     <>
     <div
+      ref={scrollCardRef}
       className="overflow-x-auto rounded-xl border border-border bg-surface"
       // Accept the drop anywhere in the table while a row is being dragged, so
       // the cursor never flickers to "not allowed" over headers, gaps, or padding.
@@ -471,13 +533,27 @@ export function TaskTable({
       <div className="relative">
       <table
         ref={tableRef}
-        className="w-full min-w-[1000px] table-fixed border-collapse text-sm"
+        className={cn(
+          "w-full table-fixed border-collapse text-sm",
+          !collapsed && "min-w-[1000px]",
+        )}
       >
         <colgroup>
-          <col className="w-[280px]" />
-          <col className="w-[52px]" />
-          {dates.map((d) => (
-            <col key={d} className={isCurrentDay(d) ? "w-[80px]" : undefined} />
+          {/* Collapsed (mobile, today-only): pin Est. + today narrow and leave the
+              Task column unsized so it absorbs all the leftover width. */}
+          <col className={collapsed ? undefined : "w-[280px]"} />
+          <col className={collapsed ? "w-[36px]" : "w-[52px]"} />
+          {columnDates.map((d) => (
+            <col
+              key={d}
+              className={
+                collapsed
+                  ? "w-[72px]"
+                  : isCurrentDay(d)
+                    ? "w-[80px]"
+                    : undefined
+              }
+            />
           ))}
         </colgroup>
         <thead>
@@ -485,7 +561,8 @@ export function TaskTable({
             <th className="sticky left-0 z-20 border-r border-border bg-surface px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
               <div className="flex items-center justify-between gap-2">
                 <span>Task</span>
-                {monthNav}
+                {/* Month pager is desktop-only; hidden on mobile. */}
+                {!isMobile && monthNav}
               </div>
             </th>
             <th
@@ -495,7 +572,7 @@ export function TaskTable({
               Est.
               <span className="block font-normal normal-case">(min.)</span>
             </th>
-            {dates.map((d, i) => {
+            {columnDates.map((d, i) => {
               const current = isCurrentDay(d);
               const dow = dayOfWeek(d);
               const weekend = dow === 0 || dow === 6;
@@ -595,7 +672,7 @@ export function TaskTable({
               <td className="border-r border-border px-1 py-2.5 text-center align-middle text-xs tabular-nums text-muted">
                 {task.estimatedDuration ?? <span className="text-muted/70">_</span>}
               </td>
-              {dates.map((d) => {
+              {columnDates.map((d) => {
                 const applies = taskAppliesOn(task, d);
                 const value = logs.get(logKey(task._id, d));
                 const isCurrent = isCurrentDay(d);
@@ -668,7 +745,7 @@ export function TaskTable({
           {extras.map((ex) => (
             <tr key={ex._id} className="group border-b border-border/40 bg-surface-2/30">
               <td
-                colSpan={dates.length + 2}
+                colSpan={columnDates.length + 2}
                 className="sticky left-0 z-10 px-4 py-2 align-middle"
               >
                 <div className="flex items-center gap-2">
@@ -700,13 +777,16 @@ export function TaskTable({
           {/* Inline "did today" add row */}
           {today && (
             <tr className="border-t border-border/60 bg-surface-2/10">
-              <td colSpan={dates.length + 2} className="px-4 py-2 align-middle">
+              <td colSpan={columnDates.length + 2} className="px-4 py-2 align-middle">
+                {/* On mobile the row wraps: the description takes the full width on
+                    its own line, then duration / category / Add share the line
+                    below. On sm+ it's the original single inline row. */}
                 <form
-                  className="flex items-center gap-2"
+                  className="flex flex-wrap items-center gap-2"
                   onSubmit={(e) => { e.preventDefault(); addExtra(); }}
                 >
                   <input
-                    className="h-8 flex-1 min-w-0 rounded-md border border-border bg-surface px-3 text-sm placeholder:text-muted/50 focus-visible:border-foreground/40 focus-visible:outline-none"
+                    className="h-8 w-full min-w-0 rounded-md border border-border bg-surface px-3 text-sm placeholder:text-muted/50 focus-visible:border-foreground/40 focus-visible:outline-none sm:w-auto sm:flex-1"
                     placeholder="+ What else did you do today?"
                     value={exDesc}
                     onChange={(e) => setExDesc(e.target.value)}
@@ -721,7 +801,7 @@ export function TaskTable({
                   />
                   {categoryList.length > 0 && (
                     <select
-                      className="h-8 w-28 shrink-0 rounded-md border border-border bg-surface px-2 text-sm text-muted focus-visible:border-foreground/40 focus-visible:outline-none"
+                      className="h-8 min-w-0 flex-1 rounded-md border border-border bg-surface px-2 text-sm text-muted focus-visible:border-foreground/40 focus-visible:outline-none sm:w-28 sm:flex-none"
                       value={exCat}
                       onChange={(e) => setExCat(e.target.value)}
                     >
@@ -744,7 +824,10 @@ export function TaskTable({
           )}
         </tbody>
       </table>
-        {todayBox && (
+        {/* The bright outline around today's column only makes sense when other
+            days sit beside it; collapsed to a single column on mobile it just
+            reads as a stray border, so it's desktop-only. */}
+        {!collapsed && todayBox && (
           <div
             aria-hidden
             className="pointer-events-none absolute z-20 rounded-lg"
@@ -758,9 +841,11 @@ export function TaskTable({
           />
         )}
       </div>
-      {/* Monthly completion trend, aligned column-for-column with the table and
-          sharing its horizontal scroll on narrow screens. */}
-      {chartGeom && chartGeom.width > 0 && (
+      {/* Desktop: the trend + mood charts sit inside the scrolling card, aligned
+          column-for-column with the table and sharing its horizontal scroll. On
+          mobile the table only shows today, so these move out to full-width cards
+          below (see the `collapsed` block after the card). */}
+      {!collapsed && chartGeom && chartGeom.width > 0 && (
         <div className="min-w-[1000px] border-t border-border">
           <div className="px-4 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
             Daily completion
@@ -773,8 +858,7 @@ export function TaskTable({
           />
         </div>
       )}
-      {/* Mood, on the same column grid so it reads against the table + trend. */}
-      {chartGeom && chartGeom.width > 0 && (
+      {!collapsed && chartGeom && chartGeom.width > 0 && (
         <div className="min-w-[1000px] border-t border-border">
           <div className="px-4 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
             Mood
@@ -788,6 +872,36 @@ export function TaskTable({
         </div>
       )}
     </div>
+
+    {/* Mobile: the whole-month charts, spread evenly across the full screen width
+        (independent of the table's single today column above). Own cards so they
+        don't inherit the table's horizontal scroll. */}
+    {collapsed && mobileGeom && mobileGeom.width > 0 && (
+      <>
+        <div className="overflow-hidden rounded-xl border border-border bg-surface">
+          <div className="px-3 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Daily completion
+          </div>
+          <MonthlyTrendChart
+            points={trendPoints}
+            width={mobileGeom.width}
+            plotLeft={mobileGeom.plotLeft}
+            plotRight={mobileGeom.plotRight}
+          />
+        </div>
+        <div className="overflow-hidden rounded-xl border border-border bg-surface">
+          <div className="px-3 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Mood
+          </div>
+          <MoodTrendChart
+            points={moodTrendPoints}
+            width={mobileGeom.width}
+            plotLeft={mobileGeom.plotLeft}
+            plotRight={mobileGeom.plotRight}
+          />
+        </div>
+      </>
+    )}
 
     {/* Today's mood input + the read-out sit outside the scrolling table card so
         they stay in view on narrow screens. Past months are read-only (no input). */}

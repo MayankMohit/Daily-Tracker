@@ -1,11 +1,19 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useRef, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { useAuth, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+import {
+  useAuth,
+  useUser,
+  useClerk,
+  SignInButton,
+  SignUpButton,
+  UserButton,
+} from "@clerk/nextjs";
+import { ThemeToggle } from "./theme-toggle";
 import { cn } from "@/lib/cn";
 import { APP_NAME } from "@/lib/config";
 import { dayKeyToDate } from "@/lib/date";
@@ -15,7 +23,6 @@ import {
   advanceActiveDay,
   editPreviousDay,
 } from "@/app/actions/active-day";
-import { ThemeToggle } from "./theme-toggle";
 
 const NAV = [
   { href: "/", label: "Dashboard" },
@@ -62,10 +69,10 @@ export function Navbar({
       <div className="flex h-14 w-full items-center px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-2 font-bold tracking-tight text-lg">
           <Image src="/icons/logo.png" alt={APP_NAME} width={40} height={40} className="rounded-md" priority unoptimized />
-          <span className="hidden sm:inline">{APP_NAME}</span>
+          <span className="translate-y-1 text-2xl">{APP_NAME}</span>
         </Link>
 
-        <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 text-sm">
+        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 text-sm md:flex">
           {NAV.map((item) => {
             const active =
               item.href === "/"
@@ -88,9 +95,13 @@ export function Navbar({
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2 sm:gap-3">
           <DayControl initial={activeDay} />
-          <ThemeToggle />
+          {/* Desktop keeps the light/dark toggle inline as before; on mobile it
+              lives in Settings only. */}
+          <span className="hidden md:inline-flex">
+            <ThemeToggle />
+          </span>
           {isSignedIn && locking && (
             <button
               type="button"
@@ -114,10 +125,14 @@ export function Navbar({
               </svg>
             </button>
           )}
+
+          {/* Desktop: profile / auth inline. On mobile these move into the menu. */}
           {isSignedIn ? (
-            <UserButton appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
+            <span className="hidden md:inline-flex">
+              <UserButton appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
+            </span>
           ) : (
-            <div className="flex items-center gap-2 text-sm">
+            <div className="hidden items-center gap-2 text-sm md:flex">
               <SignInButton mode="modal">
                 <button className="rounded-md px-3 py-1.5 text-muted hover:bg-surface-2 hover:text-foreground">
                   Sign in
@@ -130,9 +145,160 @@ export function Navbar({
               </SignUpButton>
             </div>
           )}
+
+          {/* Mobile-only: hamburger housing the nav links + profile/auth. */}
+          <MobileMenu isSignedIn={Boolean(isSignedIn)} pathname={pathname} />
         </div>
       </div>
     </header>
+  );
+}
+
+/**
+ * Mobile navigation menu (hidden on md+). A hamburger button opens a dropdown
+ * holding the same links as the desktop centre nav, plus the profile/auth controls
+ * that sit inline on desktop. Theme switching lives in Settings, not here.
+ */
+function MobileMenu({
+  isSignedIn,
+  pathname,
+}: {
+  isSignedIn: boolean;
+  pathname: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const { user } = useUser();
+  const { openUserProfile } = useClerk();
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // (Navigating closes the menu via each link's own onClick.)
+  // Close on Escape or any click/tap outside the button + panel. A document
+  // listener (not a fixed overlay) is used because the header's `backdrop-blur`
+  // makes it a containing block — a `fixed inset-0` catcher would be trapped in
+  // the 56px header and never cover the page below it.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const onPointer = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointer);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointer);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative md:hidden">
+      <button
+        ref={btnRef}
+        type="button"
+        aria-label={open ? "Close menu" : "Open menu"}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="grid h-8 w-8 place-items-center rounded-md text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-5 w-5"
+          aria-hidden
+        >
+          {open ? (
+            <>
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </>
+          ) : (
+            <>
+              <path d="M4 6h16" />
+              <path d="M4 12h16" />
+              <path d="M4 18h16" />
+            </>
+          )}
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          ref={menuRef}
+          className="absolute right-0 top-full z-50 mt-3 w-56 overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-lg"
+        >
+            <nav className="flex flex-col">
+              {NAV.map((item) => {
+                const active =
+                  item.href === "/"
+                    ? pathname === "/"
+                    : pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className={cn(
+                      "px-3 py-2 text-sm transition-colors",
+                      active
+                        ? "bg-surface-2 text-foreground"
+                        : "text-muted hover:bg-surface-2 hover:text-foreground",
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <div className="mt-1 border-t border-border px-3 py-2">
+              {isSignedIn ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    openUserProfile();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-md text-sm text-muted transition-colors hover:text-foreground"
+                >
+                  {user?.imageUrl && (
+                    <Image
+                      src={user.imageUrl}
+                      alt=""
+                      width={32}
+                      height={32}
+                      className="h-8 w-8 rounded-full"
+                      unoptimized
+                    />
+                  )}
+                  <span>Account</span>
+                </button>
+              ) : (
+                <div className="flex flex-col gap-2 text-sm">
+                  <SignInButton mode="modal">
+                    <button className="rounded-md px-3 py-1.5 text-left text-muted hover:bg-surface-2 hover:text-foreground">
+                      Sign in
+                    </button>
+                  </SignInButton>
+                  <SignUpButton mode="modal">
+                    <button className="rounded-md bg-accent px-3 py-1.5 text-accent-foreground hover:opacity-90">
+                      Sign up
+                    </button>
+                  </SignUpButton>
+                </div>
+              )}
+            </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -159,6 +325,20 @@ function DayControl({ initial }: { initial: ActiveDayState }) {
       .catch(() => {});
   }, []);
 
+  // Recompute when the timezone changes in Settings — the day boundary and the
+  // 6 PM cutoff (hence which button, if any, shows) are timezone-dependent.
+  useEffect(() => {
+    const onTimezoneChange = () => {
+      syncActiveDay()
+        .then((s) => setState(s))
+        .catch(() => {});
+      startTransition(() => router.refresh());
+    };
+    window.addEventListener("timezone:changed", onTimezoneChange);
+    return () =>
+      window.removeEventListener("timezone:changed", onTimezoneChange);
+  }, [router]);
+
   const heldLabel = format(dayKeyToDate(state.effective), "EEE, MMM d");
   const nextLabel = format(dayKeyToDate(state.real), "MMM d");
 
@@ -168,7 +348,10 @@ function DayControl({ initial }: { initial: ActiveDayState }) {
       const s = await advanceActiveDay();
       setState(s);
       startTransition(() => router.refresh());
-    } catch {
+    } finally {
+      // Always clear the spinner — on success the resulting state may still
+      // render a button (e.g. "Edit yesterday" before the cutoff), so leaving
+      // `busy` set would strand it disabled on "Loading…".
       setBusy(false);
     }
   }
@@ -179,7 +362,7 @@ function DayControl({ initial }: { initial: ActiveDayState }) {
       const s = await editPreviousDay();
       setState(s);
       startTransition(() => router.refresh());
-    } catch {
+    } finally {
       setBusy(false);
     }
   }

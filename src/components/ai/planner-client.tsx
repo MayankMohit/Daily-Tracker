@@ -98,9 +98,9 @@ export function PlannerClient({
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] lg:gap-6">
       {/* ── Inputs ─────────────────────────────────────────────── */}
-      <Card className="flex flex-col gap-5 p-5">
+      <Card className="flex flex-col gap-5 p-4 sm:p-5">
         <div>
           <h3 className="text-sm font-semibold">Add to today</h3>
           <p className="mt-0.5 text-xs text-muted">
@@ -239,7 +239,7 @@ export function PlannerClient({
       </Card>
 
       {/* ── Schedule ───────────────────────────────────────────── */}
-      <Card className="flex min-h-[420px] flex-col p-5">
+      <Card className="flex min-h-[420px] flex-col p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold">Suggested schedule</h3>
           {plan && plan.blocks.length > 0 && (
@@ -260,8 +260,8 @@ export function PlannerClient({
                 const dur = minutesBetween(b.start, b.end);
                 const last = i === plan.blocks.length - 1;
                 return (
-                  <li key={i} className="flex gap-3">
-                    <div className="flex w-[70px] shrink-0 flex-col items-end pt-1.5 text-right">
+                  <li key={i} className="flex gap-2 sm:gap-3">
+                    <div className="flex w-14 shrink-0 flex-col items-end pt-1.5 text-right sm:w-17.5">
                       <span className="text-sm font-semibold tabular-nums">
                         {to12h(b.start)}
                       </span>
@@ -363,8 +363,8 @@ function TimelineSkeleton() {
   return (
     <div className="flex-1 space-y-3">
       {[0, 1, 2, 3, 4].map((i) => (
-        <div key={i} className="flex gap-3">
-          <div className="h-9 w-[70px] shrink-0 animate-pulse rounded bg-surface-2" />
+        <div key={i} className="flex gap-2 sm:gap-3">
+          <div className="h-9 w-14 shrink-0 animate-pulse rounded bg-surface-2 sm:w-17.5" />
           <div className="mt-1 h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-surface-2" />
           <div
             className="h-11 flex-1 animate-pulse rounded-lg bg-surface-2"

@@ -283,3 +283,30 @@ body::after {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
+
+/* ── Clerk dialogs (UserProfile / UserButton) ─────────────────────────────────
+   Two fixes for the account modal:
+   1. Size — the app scales its whole UI through the root font-size ([data-density]
+      on <html>), which also rescales Clerk's em/rem-based components. Pinning the
+      Clerk roots to a fixed 16px base keeps its dialog a sane size, and we cap the
+      width so it never sprawls on wide screens.
+   2. Centring — re-assert grid centring on the backdrop (grid keeps a taller-than-
+      viewport dialog scrollable instead of clipping it), and cap the height so a
+      long profile panel scrolls inside rather than overflowing the screen. */
+.cl-modalBackdrop {
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 1.5rem 1rem;
+}
+.cl-modalContent {
+  max-width: min(48rem, 100%);
+  max-height: calc(100dvh - 3rem);
+  margin: auto;
+}
+.cl-rootBox,
+.cl-card,
+.cl-modalContent,
+.cl-userButtonPopoverCard {
+  font-size: 16px;
+}
