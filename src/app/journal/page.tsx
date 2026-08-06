@@ -37,7 +37,11 @@ export default async function JournalPage() {
 
   return (
     <div>
+      {/* Keyed on the effective day so the day-rollover control's refresh
+          remounts the editor onto the new day (re-seeding its once-initialised
+          title/body/decryption state) instead of leaving yesterday's entry. */}
       <JournalBox
+        key={today}
         date={today}
         initial={journal}
         crypto={crypto}

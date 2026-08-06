@@ -78,9 +78,11 @@ export default async function DashboardPage({
         />
       ) : (
         // Remount on month change so the table re-seeds its log/extras state
-        // from the new month's props (useState initializers run once).
+        // from the new month's props (useState initializers run once). Also keyed
+        // on the effective day so the day-rollover control's refresh re-seeds
+        // today's editable column, extras, and mood onto the new day.
         <TaskTable
-          key={viewMonth}
+          key={`${viewMonth}:${today}`}
           tasks={tasks}
           dates={dates}
           initialLogs={logs}

@@ -34,7 +34,10 @@ export default async function PlannerPage() {
   ]);
 
   return (
+    // Keyed on the day so the day-rollover control's refresh remounts the planner
+    // onto the new day, re-seeding its plan/inputs instead of showing yesterday's.
     <PlannerClient
+      key={date}
       date={date}
       initialPlan={initialPlan}
       initialWake={prefs.workingHours.wake}

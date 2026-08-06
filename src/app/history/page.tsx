@@ -71,7 +71,7 @@ export default async function HistoryPage({
 
   return (
     <HistoryCalendar
-      key={viewMonth}
+      key={`${viewMonth}:${today}`}
       month={viewMonth}
       currentMonth={currentMonth}
       today={today}

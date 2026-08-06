@@ -4,7 +4,7 @@
 // water every day"; Gemini drafts a structured task, which the user confirms
 // before it's created. Confirmation keeps the user in control of what's saved.
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Card, inputClass } from "@/components/ui";
 import { Modal } from "@/components/modal";
@@ -52,6 +52,19 @@ export function AiQuickAdd({
   const [, startTransition] = useTransition();
   const router = useRouter();
 
+  // On desktop the input is wide enough for a rich example that shows off what
+  // the AI can parse (amount, schedule, time, priority); on phones it's narrow,
+  // so keep the short prompt there. Starts `false` to match SSR (avoids a
+  // hydration mismatch), then syncs after mount and on viewport changes.
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 640px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   async function draftTask() {
     if (!text.trim()) return;
     setLoading(true);
@@ -91,7 +104,11 @@ export function AiQuickAdd({
       <div className="flex flex-wrap items-center gap-2">
         <input
           className={`${inputClass} h-9 min-w-0 flex-1`}
-          placeholder="Describe a task"
+          placeholder={
+            isDesktop
+              ? "✨ Describe a task, eg: Read 20 pages every weekday at 8 PM — high priority, category Learning"
+              : "✨ Describe a task"
+          }
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && draftTask()}
