@@ -10,6 +10,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
 import { Card, Field, inputClass, Button } from "@/components/ui";
+import { useOnline } from "@/lib/use-online";
+import { OfflineNotice } from "@/components/offline-notice";
 import {
   AUTO_LOCK_EVENT,
   LOCK_DELAY_OPTIONS,
@@ -50,8 +52,10 @@ export function PinSettings({ initialAutoLockMs }: { initialAutoLockMs: number }
   const [pin2, setPin2] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const online = useOnline();
 
   useEffect(() => {
+    if (!navigator.onLine) return; // offline: leave `enabled` null → offline notice
     api
       .get<{ enabled: boolean; hasRecoveryCode: boolean }>("/api/pin")
       .then((r) => {
@@ -167,7 +171,9 @@ export function PinSettings({ initialAutoLockMs }: { initialAutoLockMs: number }
         </p>
       </div>
 
-      {issuedCode ? (
+      {!online ? (
+        <OfflineNotice feature="App-lock changes" />
+      ) : issuedCode ? (
         <RecoveryReveal
           code={issuedCode}
           onDone={() => {

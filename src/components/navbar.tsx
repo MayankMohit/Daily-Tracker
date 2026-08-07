@@ -15,6 +15,7 @@ import {
 } from "@clerk/nextjs";
 import { ThemeToggle } from "./theme-toggle";
 import { cn } from "@/lib/cn";
+import { useOnline } from "@/lib/use-online";
 import { APP_NAME } from "@/lib/config";
 import { dayKeyToDate } from "@/lib/date";
 import type { ActiveDayState } from "@/lib/active-day";
@@ -44,6 +45,7 @@ export function Navbar({
 }) {
   const pathname = usePathname();
   const { isSignedIn } = useAuth();
+  const online = useOnline();
 
   // Track enable/disable done in Settings so the lock button appears/disappears
   // without a full reload (Settings broadcasts these events).
@@ -129,11 +131,15 @@ export function Navbar({
             </button>
           )}
 
-          {/* Desktop: profile / auth inline. On mobile these move into the menu. */}
+          {/* Desktop: profile / auth inline. On mobile these move into the menu.
+              Offline, auth can't be verified, so show an Offline badge instead of
+              sign-in/up controls that wouldn't work. */}
           {isSignedIn ? (
             <span className="hidden md:inline-flex">
               <UserButton appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
             </span>
+          ) : !online ? (
+            <OfflineBadge className="hidden md:inline-flex" />
           ) : (
             <div className="hidden items-center gap-2 text-sm md:flex">
               <SignInButton mode="modal">
@@ -150,7 +156,11 @@ export function Navbar({
           )}
 
           {/* Mobile-only: hamburger housing the nav links + profile/auth. */}
-          <MobileMenu isSignedIn={Boolean(isSignedIn)} pathname={pathname} />
+          <MobileMenu
+            isSignedIn={Boolean(isSignedIn)}
+            online={online}
+            pathname={pathname}
+          />
         </div>
       </div>
     </header>
@@ -162,11 +172,47 @@ export function Navbar({
  * holding the same links as the desktop centre nav, plus the profile/auth controls
  * that sit inline on desktop. Theme switching lives in Settings, not here.
  */
+// Small "Offline" pill shown in place of auth controls when there's no
+// connection (sign-in/up need the network, so they're not offered offline).
+function OfflineBadge({ className }: { className?: string }) {
+  return (
+    <span
+      title="You're offline"
+      className={cn(
+        "items-center gap-1.5 rounded-md border border-border bg-surface-2 px-2.5 py-1 text-xs font-medium text-muted",
+        className,
+      )}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="h-3.5 w-3.5"
+        aria-hidden
+      >
+        <path d="M2 2l20 20" />
+        <path d="M8.5 16.5a5 5 0 0 1 7 0" />
+        <path d="M2 8.82a15 15 0 0 1 4.17-2.65" />
+        <path d="M10.66 5c4.01-.36 8.14.9 11.34 3.76" />
+        <path d="M16.85 11.25a10 10 0 0 1 2.22 1.68" />
+        <path d="M5 13a10 10 0 0 1 5.24-2.76" />
+        <line x1="12" y1="20" x2="12.01" y2="20" />
+      </svg>
+      Offline
+    </span>
+  );
+}
+
 function MobileMenu({
   isSignedIn,
+  online,
   pathname,
 }: {
   isSignedIn: boolean;
+  online: boolean;
   pathname: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -284,6 +330,8 @@ function MobileMenu({
                   )}
                   <span>Account</span>
                 </button>
+              ) : !online ? (
+                <OfflineBadge className="inline-flex" />
               ) : (
                 <div className="flex flex-col gap-2 text-sm">
                   <SignInButton mode="modal">

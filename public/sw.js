@@ -12,7 +12,7 @@
  *    IndexedDB outbox); on reconnect a Background Sync nudges the app to replay.
  */
 
-const VERSION = "v4";
+const VERSION = "v5";
 const SHELL_CACHE = `dt-shell-${VERSION}`;
 const ASSET_CACHE = `dt-assets-${VERSION}`;
 const DATA_CACHE = `dt-data-${VERSION}`;
@@ -20,6 +20,7 @@ const DATA_CACHE = `dt-data-${VERSION}`;
 const SHELL_ASSETS = [
   "/offline.html",
   "/icons/icon-192.png",
+  "/icons/logo.png",
   "/manifest.webmanifest",
 ];
 

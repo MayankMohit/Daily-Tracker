@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type 
 import { useRouter } from "next/navigation";
 import type { ExtraActivity, MoodLog, Task, TaskLog, TaskLogValue } from "@/lib/types";
 import { api } from "@/lib/client";
+import { outboxAll, OUTBOX_CHANGED, OUTBOX_DRAINED } from "@/lib/offline/outbox";
 import { onTaskCreated } from "@/lib/task-events";
 import { logKey } from "@/lib/keys";
 import { taskAppliesOn } from "@/lib/recurrence";
@@ -102,12 +103,19 @@ export function TaskTable({
       ).sort(),
     [tasks],
   );
+  // Tasks created while offline live only in the outbox until they sync, so the
+  // server props (stale, cached) don't include them. We reconstruct them here so
+  // they show up as normal rows and survive a refresh.
+  const [pendingTasks, setPendingTasks] = useState<Task[]>([]);
   // Task lookup by id, so a cell edit can compute its optimistic value (which
   // depends on the task's type + percentage config) without a server round-trip.
-  const taskById = useMemo(
-    () => new Map(tasks.map((t) => [t._id, t])),
-    [tasks],
-  );
+  // Includes offline-created tasks so their cells can be logged too.
+  const taskById = useMemo(() => {
+    const m = new Map<string, Task>();
+    for (const t of tasks) m.set(t._id, t);
+    for (const t of pendingTasks) m.set(t._id, t);
+    return m;
+  }, [tasks, pendingTasks]);
   const [logs, setLogs] = useState<Map<string, TaskLogValue>>(() => {
     const m = new Map<string, TaskLogValue>();
     for (const l of initialLogs) m.set(logKey(l.taskId, l.date), l.value);
@@ -207,12 +215,13 @@ export function TaskTable({
 
   // Local row order for drag-to-reorder, seeded from the server order. When the
   // server sends a new list (add/archive/etc.) we re-sync by adjusting state
-  // during render — React's recommended pattern over a setState-in-effect.
-  const [order, setOrder] = useState<Task[]>(tasks);
+  // during render — React's recommended pattern over a setState-in-effect. We
+  // re-append any offline-created tasks so a refresh can't drop them.
+  const [order, setOrder] = useState<Task[]>(() => mergePending(tasks, pendingTasks));
   const [syncedFrom, setSyncedFrom] = useState(tasks);
   if (syncedFrom !== tasks) {
     setSyncedFrom(tasks);
-    setOrder(tasks);
+    setOrder(mergePending(tasks, pendingTasks));
   }
 
   // Optimistic task mutations. Create/edit/delete each update this local `order`
@@ -238,6 +247,95 @@ export function TaskTable({
   // live outside this table) is broadcast so it shows here without waiting for
   // the refresh round-trip. The full refresh still follows and reconciles.
   useEffect(() => onTaskCreated(optimisticUpsert), [optimisticUpsert]);
+
+  // Fold the offline outbox back into the table. Offline-created tasks (and any
+  // queued log / "+did" / mood changes) live only in IndexedDB until they sync,
+  // and a refresh reseeds the table from stale cached props — so without this
+  // they'd vanish. Re-applied on mount and whenever the outbox changes (including
+  // after a drain, when it's empty and this is a no-op).
+  useEffect(() => {
+    let cancelled = false;
+    type PendingBody = {
+      date?: string;
+      description?: string;
+      estimatedDuration?: number;
+      category?: string;
+      taskId?: string;
+      mood?: number;
+      boolStatus?: boolean;
+      failed?: boolean;
+      actualValue?: number;
+      directPercentage?: number;
+      clear?: boolean;
+    };
+    const sync = () => {
+      void outboxAll().then((recs) => {
+        if (cancelled) return;
+        // Reconstruct offline-created tasks first, so their own logs resolve below.
+        const pending: Task[] = [];
+        for (const rec of recs) {
+          if (rec.kind === "task-create" && rec.tempId) {
+            const b = rec.body as Partial<Task>;
+            pending.push({
+              ...b,
+              _id: rec.tempId,
+              userId: "local",
+              createdAt: new Date(rec.createdAt).toISOString(),
+            } as Task);
+          }
+        }
+        // Keep the same empty array reference when nothing's pending, so the
+        // common online case doesn't churn re-renders.
+        setPendingTasks((cur) => (cur.length === 0 && pending.length === 0 ? cur : pending));
+        if (pending.length) setOrder((cur) => mergePending(cur, pending));
+
+        // Task lookup incl. offline-created tasks, for rebuilding log cell values.
+        const lookup = new Map<string, Task>();
+        for (const t of tasks) lookup.set(t._id, t);
+        for (const t of pending) lookup.set(t._id, t);
+
+        for (const rec of recs) {
+          const body = (rec.body ?? {}) as PendingBody;
+          if (rec.kind === "extra-create" && body.date && body.date === today && rec.tempId) {
+            const extra: ExtraActivity = {
+              _id: rec.tempId,
+              userId: "local",
+              date: body.date,
+              description: body.description ?? "",
+              estimatedDuration: body.estimatedDuration,
+              category: body.category,
+              createdAt: new Date(rec.createdAt).toISOString(),
+            };
+            setExtras((xs) => (xs.some((x) => x._id === extra._id) ? xs : [...xs, extra]));
+          } else if (rec.kind === "extra-delete") {
+            const id = rec.url.split("?")[0].split("/").pop();
+            if (id) setExtras((xs) => xs.filter((x) => x._id !== id));
+          } else if (rec.kind === "log" && body.taskId && body.date) {
+            const task = lookup.get(body.taskId);
+            if (!task || (today && body.date !== today)) continue; // only today is live
+            const key = logKey(body.taskId, body.date);
+            setLogs((m) => {
+              const v = optimisticLogValue(task, body, m.get(key));
+              const next = new Map(m);
+              if (v) next.set(key, v);
+              else next.delete(key);
+              return next;
+            });
+          } else if (rec.kind === "mood" && today && body.date === today && body.mood) {
+            setMoods((m) => new Map(m).set(today, body.mood!));
+          }
+        }
+      });
+    };
+    sync();
+    window.addEventListener(OUTBOX_CHANGED, sync);
+    window.addEventListener(OUTBOX_DRAINED, sync);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(OUTBOX_CHANGED, sync);
+      window.removeEventListener(OUTBOX_DRAINED, sync);
+    };
+  }, [today, tasks]);
 
   // `dragId` is the row being dragged; `handleId` gates HTML5 dragging so a row
   // is only draggable while its grip is held (keeps inputs/buttons usable).
@@ -1039,6 +1137,16 @@ export function TaskTable({
     )}
     </>
   );
+}
+
+// Append offline-created tasks (from the outbox) that aren't already in the
+// server list, so a refresh — which reseeds from stale cached props — can't drop
+// them. Order-preserving; dedups by id (once synced, the real row replaces them).
+function mergePending(base: Task[], pending: Task[]): Task[] {
+  if (pending.length === 0) return base;
+  const have = new Set(base.map((t) => t._id));
+  const extra = pending.filter((p) => !have.has(p._id));
+  return extra.length ? [...base, ...extra] : base;
 }
 
 // Assemble the hover-tooltip content for a single (task, date) cell. For the

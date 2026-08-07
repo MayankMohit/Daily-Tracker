@@ -9,6 +9,8 @@ import { Card } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { api } from "@/lib/client";
 import type { DailyPlan } from "@/lib/types";
+import { useOnline } from "@/lib/use-online";
+import { OfflineNotice } from "@/components/offline-notice";
 
 interface Item {
   description: string;
@@ -37,6 +39,7 @@ export function PlannerClient({
   const [plan, setPlan] = useState<DailyPlan | null>(initialPlan);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const online = useOnline();
 
   // Planner hours: the window the AI schedules within (persisted as the user's
   // `workingHours` pref). Saved on blur so tweaking a time doesn't spam the API.
@@ -213,10 +216,11 @@ export function PlannerClient({
           </div>
         </div>
 
+        {!online && <OfflineNotice feature="AI day planning" />}
         <button
           type="button"
           onClick={generate}
-          disabled={loading}
+          disabled={loading || !online}
           className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-accent text-sm font-semibold text-accent-foreground shadow-sm transition hover:opacity-90 disabled:opacity-60"
         >
           {loading ? (

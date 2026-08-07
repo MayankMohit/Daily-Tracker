@@ -13,6 +13,8 @@ import { api } from "@/lib/client";
 import type { TaskInput } from "@/lib/schemas";
 import type { Task } from "@/lib/types";
 import { emitTaskCreated } from "@/lib/task-events";
+import { useOnline } from "@/lib/use-online";
+import { OfflineNotice } from "@/components/offline-notice";
 
 function chips(t: TaskInput): string[] {
   const bits: string[] = [
@@ -51,6 +53,7 @@ export function AiQuickAdd({
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const router = useRouter();
+  const online = useOnline();
 
   // On desktop the input is wide enough for a rich example that shows off what
   // the AI can parse (amount, schedule, time, priority); on phones it's narrow,
@@ -105,26 +108,29 @@ export function AiQuickAdd({
         <input
           className={`${inputClass} h-9 min-w-0 flex-1`}
           placeholder={
-            isDesktop
-              ? "✨ Describe a task, eg: Read 20 pages every weekday at 8 PM — high priority, category Learning"
-              : "✨ Describe a task"
+            !online
+              ? "✨ AI drafting needs a connection"
+              : isDesktop
+                ? "✨ Describe a task, eg: Read 20 pages every weekday at 8 PM — high priority, category Learning"
+                : "✨ Describe a task"
           }
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && draftTask()}
-          disabled={loading || saving}
+          disabled={loading || saving || !online}
         />
         <Button
           size="sm"
           className="h-9 shrink-0"
           onClick={draftTask}
-          disabled={loading || saving || !text.trim()}
+          disabled={loading || saving || !online || !text.trim()}
         >
           {loading ? "Drafting…" : "Draft with AI"}
         </Button>
         {action}
       </div>
 
+      {!online && <OfflineNotice feature="AI task drafting" />}
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {draft && (

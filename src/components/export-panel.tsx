@@ -6,10 +6,13 @@
 import { useState } from "react";
 import { Card, Field, inputClass, Button } from "./ui";
 import { todayKey, lastNDays } from "@/lib/date";
+import { useOnline } from "@/lib/use-online";
+import { OfflineNotice } from "./offline-notice";
 
 export function ExportPanel() {
   const [from, setFrom] = useState(lastNDays(30)[0]);
   const [to, setTo] = useState(todayKey());
+  const online = useOnline();
 
   function download(format: "csv" | "json") {
     const url = `/api/export?format=${format}&from=${from}&to=${to}`;
@@ -46,11 +49,12 @@ export function ExportPanel() {
           />
         </Field>
       </div>
+      {!online && <OfflineNotice feature="Data export" />}
       <div className="flex gap-2">
-        <Button variant="secondary" onClick={() => download("csv")}>
+        <Button variant="secondary" onClick={() => download("csv")} disabled={!online}>
           Export CSV
         </Button>
-        <Button variant="secondary" onClick={() => download("json")}>
+        <Button variant="secondary" onClick={() => download("json")} disabled={!online}>
           Export JSON
         </Button>
       </div>

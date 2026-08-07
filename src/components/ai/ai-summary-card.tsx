@@ -8,6 +8,8 @@ import { useState } from "react";
 import { Card, Button } from "@/components/ui";
 import { api } from "@/lib/client";
 import type { AiInsight } from "@/lib/types";
+import { useOnline } from "@/lib/use-online";
+import { OfflineNotice } from "@/components/offline-notice";
 
 type SummaryType = "daily" | "weekly";
 
@@ -22,6 +24,7 @@ export function AiSummaryCard({
   >(initial);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const online = useOnline();
 
   const insight = byType[type] ?? null;
 
@@ -64,7 +67,7 @@ export function AiSummaryCard({
           size="sm"
           variant={insight ? "secondary" : "primary"}
           onClick={() => generate(Boolean(insight))}
-          disabled={loading}
+          disabled={loading || !online}
         >
           {loading
             ? "Thinking…"
@@ -74,6 +77,7 @@ export function AiSummaryCard({
         </Button>
       </div>
 
+      {!online && <OfflineNotice feature="AI summaries" />}
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {insight ? (
