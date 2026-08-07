@@ -187,6 +187,10 @@ function LockScreen({
   const [error, setError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const [shake, setShake] = useState(false);
+  // The verify PATCH can take a couple of seconds on a cold serverless instance
+  // in prod, so surface a "Unlocking…" state between the 4th digit and the reveal
+  // rather than leaving the screen looking frozen.
+  const [verifying, setVerifying] = useState(false);
   // "Forgot PIN?" opens an inline recovery-code prompt rather than resetting
   // outright — the code (saved when the lock was enabled) is what authorizes it.
   const [resetOpen, setResetOpen] = useState(false);
@@ -210,6 +214,7 @@ function LockScreen({
     async (candidate: string) => {
       if (inFlight.current) return;
       inFlight.current = true;
+      setVerifying(true);
       setError(null);
       try {
         await api.patch("/api/pin", { pin: candidate });
@@ -222,6 +227,7 @@ function LockScreen({
         focusInput();
       } finally {
         inFlight.current = false;
+        setVerifying(false);
       }
     },
     [onUnlock, focusInput],
@@ -270,7 +276,7 @@ function LockScreen({
         {/* The boxes are presentational; the transparent input on top captures all
             typing/paste and keeps focus, so clicking anywhere in the row focuses it. */}
         <label className="relative mx-auto block w-fit cursor-text">
-          <div className="flex justify-center gap-3">
+          <div className={cn("flex justify-center gap-3", verifying && "animate-pulse")}>
             {[0, 1, 2, 3].map((i) => (
               <div
                 key={i}
@@ -278,9 +284,11 @@ function LockScreen({
                   "grid h-14 w-12 place-items-center rounded-xl border bg-surface text-2xl transition-colors",
                   error
                     ? "border-danger"
-                    : i === pin.length
+                    : verifying
                       ? "border-foreground/60"
-                      : "border-border",
+                      : i === pin.length
+                        ? "border-foreground/60"
+                        : "border-border",
                 )}
               >
                 {pin[i] ? "•" : ""}
@@ -304,7 +312,34 @@ function LockScreen({
         </label>
 
         <div className="h-4 text-sm">
-          {error && <span className="text-danger">{error}</span>}
+          {verifying ? (
+            <span className="inline-flex items-center gap-1.5 text-muted">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                className="h-3.5 w-3.5 animate-spin"
+                aria-hidden
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  className="opacity-25"
+                />
+                <path
+                  d="M21 12a9 9 0 0 0-9-9"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                />
+              </svg>
+              Unlocking…
+            </span>
+          ) : (
+            error && <span className="text-danger">{error}</span>
+          )}
         </div>
 
         {resetOpen ? (

@@ -39,7 +39,7 @@ export function NotesList({ initial }: { initial: Note[] }) {
       {notes.length === 0 ? (
         <EmptyState
           title="No notes yet"
-          description="Jot anything down — a checklist, an idea, a plan. Notes support bullets, checkboxes, and basic formatting."
+          description="Jot anything down — a checklist, an idea, a plan. Just start typing; use the toolbar for headings, bullets, and checkboxes."
           action={<Button onClick={() => setEditing("new")}>+ New note</Button>}
         />
       ) : (
@@ -51,7 +51,7 @@ export function NotesList({ initial }: { initial: Note[] }) {
               onClick={() => setEditing(n)}
               className="text-left"
             >
-              <Card className="h-full transition-colors hover:bg-surface-2/50">
+              <Card className="h-full transition-colors hover:bg-surface-2">
                 {n.title && (
                   <div className="mb-1 truncate font-medium">{n.title}</div>
                 )}
