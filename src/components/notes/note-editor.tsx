@@ -51,15 +51,27 @@ export function NoteEditor({
   //   saveTimer   the debounce handle for autosave-after-you-stop-typing
   const currentRef = useRef<Note | undefined>(note);
   const titleRef = useRef(note?.title ?? "");
+  // Latest serialized body, mirrored from the live editor on every edit. Saving
+  // reads *this*, not the DOM directly, so a save fired after the editor node is
+  // gone (the unmount flush when the modal closes — React has already detached
+  // editorRef by then) still writes the real content instead of an empty string.
+  const bodyRef = useRef(note?.body ?? "");
   const savingRef = useRef(false);
   const pendingRef = useRef(false);
   const discardRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Pull the current markdown out of the live editor into bodyRef. No-op once the
+  // node is detached (unmount), so bodyRef then keeps its last synced value.
+  function syncBody() {
+    const el = editorRef.current;
+    if (el) bodyRef.current = editorToMarkdown(el);
+  }
+
   async function save() {
     if (discardRef.current) return; // being deleted — don't resurrect it
-    const el = editorRef.current;
-    const body = el ? editorToMarkdown(el) : "";
+    syncBody(); // refresh from the DOM while it's still there
+    const body = bodyRef.current;
     const t = titleRef.current;
     if (!body.trim() && !t.trim()) return; // nothing worth saving
     const cur = currentRef.current;
@@ -104,6 +116,7 @@ export function NoteEditor({
   // Autosave after the user pauses typing; flushSave runs it now (blur, ticking a
   // box, Save button) and cancels any pending debounce first.
   function scheduleSave() {
+    syncBody(); // capture the latest content now, while the editor is alive
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
@@ -111,6 +124,7 @@ export function NoteEditor({
     }, 700);
   }
   function flushSave() {
+    syncBody();
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
