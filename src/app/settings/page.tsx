@@ -54,6 +54,20 @@ export default async function SettingsPage() {
         <PinSettings initialAutoLockMs={prefs.autoLockMs} />
         <ArchivedTasks initial={archived} />
         <ExportPanel />
+
+        {/* Attribution required by the Flaticon free license for the app logo. */}
+        <p className="px-1 pt-2 text-center text-xs text-muted">
+          Logo:{" "}
+          <a
+            href="https://www.flaticon.es/iconos-gratis/puno"
+            title="puño iconos"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Puño iconos creados por iconfield - Flaticon
+          </a>
+        </p>
       </div>
     </div>
   );

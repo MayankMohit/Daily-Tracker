@@ -93,9 +93,36 @@ export function AppearanceSettings() {
   // Slider shows how *visible* the pattern is; the stored overlay is the inverse
   // (a higher scrim opacity = a fainter, more readable pattern).
   const visibility = Math.round((1 - appearance.background.overlay) * 100);
-  // How opaque the section cards/panels are (30–100%); lower reveals more of the
-  // background scenery through them.
-  const sectionOpacity = Math.round(appearance.background.surfaceAlpha * 100);
+
+  // Section opacity (85–100%): lower reveals more of the background scenery through
+  // cards/panels. `--surface-alpha` feeds a `color-mix` that resolves on *every*
+  // surface in the document, so a full-page style recalc runs on each change —
+  // pushing that on every raw input event stuttered the drag (100ms+ recalcs). So
+  // we drive the thumb from fast local state, write the var straight to <html> at
+  // most once per animation frame (no React re-render during the drag), and only
+  // commit to appearance state (which persists + saves) on release.
+  const [dragAlpha, setDragAlpha] = useState<number | null>(null);
+  const alphaRaf = useRef<number | null>(null);
+  const liveAlpha = dragAlpha ?? appearance.background.surfaceAlpha;
+  const sectionOpacity = Math.round(liveAlpha * 100);
+
+  function onOpacityDrag(pct: number) {
+    const alpha = pct / 100;
+    setDragAlpha(alpha); // thumb follows immediately
+    if (alphaRaf.current !== null) cancelAnimationFrame(alphaRaf.current);
+    alphaRaf.current = requestAnimationFrame(() => {
+      document.documentElement.style.setProperty("--surface-alpha", String(alpha));
+    });
+  }
+  function onOpacityCommit() {
+    if (alphaRaf.current !== null) cancelAnimationFrame(alphaRaf.current);
+    if (dragAlpha !== null) {
+      setAppearance({
+        background: { ...appearance.background, surfaceAlpha: dragAlpha },
+      });
+      setDragAlpha(null);
+    }
+  }
 
   // Pattern-density control (only for the repeating-tile presets). Stored value is
   // the tile size in px; the slider reads as "density" (higher = denser = smaller
@@ -393,14 +420,9 @@ export function AppearanceSettings() {
               min={85}
               max={100}
               value={sectionOpacity}
-              onChange={(e) =>
-                setAppearance({
-                  background: {
-                    ...appearance.background,
-                    surfaceAlpha: Number(e.target.value) / 100,
-                  },
-                })
-              }
+              onChange={(e) => onOpacityDrag(Number(e.target.value))}
+              onPointerUp={onOpacityCommit}
+              onBlur={onOpacityCommit}
               className="w-full accent-accent"
             />
           </label>
