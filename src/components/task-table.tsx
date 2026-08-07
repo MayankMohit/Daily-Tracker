@@ -664,6 +664,7 @@ export function TaskTable({
           {order.map((task, i) => (
             <tr
               key={task._id}
+              data-task-id={task._id}
               ref={i === order.length - 1 ? taskRowsEndRef : undefined}
               draggable={handleId === task._id}
               onDragStart={(e) => {
@@ -701,7 +702,37 @@ export function TaskTable({
                     onMouseDown={() => setHandleId(task._id)}
                     onMouseUp={() => setHandleId(null)}
                     onMouseLeave={() => setHandleId((h) => (dragId ? h : null))}
-                    className="-ml-2.5 grid h-6 w-4 shrink-0 cursor-grab touch-none place-items-center text-muted opacity-100 transition-opacity hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100 active:cursor-grabbing"
+                    // Touch reorder: HTML5 drag-and-drop never fires on
+                    // touchscreens, so drive it manually. `touch-none` (on this
+                    // handle) stops the gesture from scrolling the page, and touch
+                    // events keep targeting this button for the whole gesture even
+                    // as the finger moves over other rows.
+                    onTouchStart={() => {
+                      dragIdRef.current = task._id;
+                      setDragId(task._id);
+                      setHandleId(task._id);
+                    }}
+                    onTouchMove={(e) => {
+                      if (!dragIdRef.current) return;
+                      const t = e.touches[0];
+                      if (!t) return;
+                      const row = (
+                        document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null
+                      )?.closest("tr[data-task-id]") as HTMLElement | null;
+                      const targetId = row?.getAttribute("data-task-id");
+                      if (targetId && targetId !== dragIdRef.current) {
+                        const rect = row!.getBoundingClientRect();
+                        moveRelative(targetId, t.clientY > rect.top + rect.height / 2);
+                      }
+                    }}
+                    onTouchEnd={() => {
+                      if (!dragIdRef.current) return;
+                      dragIdRef.current = null;
+                      setDragId(null);
+                      setHandleId(null);
+                      void persistOrder();
+                    }}
+                    className="-ml-2.5 grid h-6 w-4 shrink-0 cursor-grab touch-none place-items-center text-muted opacity-100 transition-opacity hover:text-foreground active:cursor-grabbing"
                   >
                     ⠿
                   </button>
@@ -816,7 +847,7 @@ export function TaskTable({
                     type="button"
                     onClick={() => removeExtra(ex._id)}
                     aria-label="Remove"
-                    className="text-muted opacity-0 transition-opacity hover:text-danger group-hover:opacity-100 shrink-0"
+                    className="text-muted opacity-100 transition-colors hover:text-danger shrink-0"
                   >
                     ✕
                   </button>
