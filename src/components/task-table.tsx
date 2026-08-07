@@ -409,8 +409,8 @@ export function TaskTable({
       // responds on tap, instead of waiting for the server round-trip. The server
       // response then reconciles to the authoritative value; a failure rolls back.
       const task = taskById.get(taskId);
+      const optimistic = task ? optimisticLogValue(task, body, prev) : prev ?? null;
       if (task) {
-        const optimistic = optimisticLogValue(task, body, prev);
         setLogs((m) => {
           const next = new Map(m);
           if (optimistic) next.set(key, optimistic);
@@ -424,9 +424,13 @@ export function TaskTable({
           date,
           ...body,
         });
+        // Offline, the queued call resolves to a body echo without a computed
+        // `.value`; fall back to the optimistic value so the cell stays correct
+        // until the outbox syncs and a refresh brings the authoritative log.
+        const value = log && "value" in log ? log.value : optimistic;
         setLogs((m) => {
           const next = new Map(m);
-          if (log) next.set(key, log.value);
+          if (value) next.set(key, value);
           else next.delete(key);
           return next;
         });
@@ -1527,11 +1531,16 @@ function QuantityInput({
     current !== undefined ? String(current) : "",
   );
 
-  // Keep the input in sync if the underlying value changes elsewhere.
-  const shown = useMemo(
-    () => (current !== undefined ? String(current) : ""),
-    [current],
-  );
+  // Re-seed the field only when the committed value changes elsewhere (optimistic
+  // paint, server reconcile) — never during an in-progress edit, so clearing the
+  // field with Backspace sticks instead of snapping back to the old number.
+  const prevCurrent = useRef(current);
+  useEffect(() => {
+    if (prevCurrent.current !== current) {
+      prevCurrent.current = current;
+      setDraft(current !== undefined ? String(current) : "");
+    }
+  }, [current]);
 
   function commit() {
     const trimmed = draft.trim();
@@ -1541,7 +1550,7 @@ function QuantityInput({
     }
     const n = Number(trimmed);
     if (Number.isNaN(n) || n < 0) {
-      setDraft(shown);
+      setDraft(current !== undefined ? String(current) : ""); // revert to committed
       return;
     }
     onCommit(mode === "direct" ? Math.min(100, n) : n);
@@ -1553,7 +1562,7 @@ function QuantityInput({
       inputMode="decimal"
       min="0"
       step="any"
-      value={draft === "" && shown !== "" ? shown : draft}
+      value={draft}
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}

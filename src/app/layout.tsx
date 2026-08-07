@@ -6,6 +6,7 @@ import "./globals.css";
 import { ThemeProvider, themeInitScript } from "@/components/theme-provider";
 import { Navbar } from "@/components/navbar";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
+import { OfflineIndicator } from "@/components/offline-indicator";
 import { TimezoneSync } from "@/components/timezone-sync";
 import { NoContextMenu } from "@/components/no-context-menu";
 import { PinGate } from "@/components/pin/pin-gate";
@@ -211,6 +212,7 @@ export default async function RootLayout({
               from the signed-in user, and PinGate also self-hides if signed out. */}
           <PinGate initialEnabled={pinEnabled} initialAutoLockMs={autoLockMs} />
           <TimezoneSync timezone={timezone} />
+          <OfflineIndicator />
           <ServiceWorkerRegister />
           <NoContextMenu />
         </ClerkProvider>
