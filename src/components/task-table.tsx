@@ -747,7 +747,9 @@ export function TaskTable({
                   <td
                     key={d}
                     onMouseEnter={
-                      applies
+                      // Hover details are pointer-only: on touch devices the
+                      // synthesised hover sticks after a tap, so skip it on mobile.
+                      applies && !isMobile
                         ? (e) => {
                             const r = e.currentTarget.getBoundingClientRect();
                             showTipLater({
@@ -758,7 +760,7 @@ export function TaskTable({
                           }
                         : undefined
                     }
-                    onMouseLeave={applies ? hideTip : undefined}
+                    onMouseLeave={applies && !isMobile ? hideTip : undefined}
                     className={cn(
                       "px-0 py-1.5 text-center align-middle",
                       isCurrent
