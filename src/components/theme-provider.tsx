@@ -49,6 +49,8 @@ function applyAppearance(a: Appearance) {
   el.setAttribute("data-corners", a.corners);
   el.setAttribute("data-density", a.density);
   el.style.setProperty("--bg-overlay", String(a.background.overlay));
+  el.style.setProperty("--bg-pattern-size", `${a.background.patternScale}px`);
+  el.style.setProperty("--surface-alpha", String(a.background.surfaceAlpha));
 
   // Gradient presets are driven by CSS `[data-bg="…"]`; photos are set inline
   // (the CSS can't know the file names). Clear any inline image when switching

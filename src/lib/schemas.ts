@@ -172,8 +172,12 @@ export type PinDisableInput = z.infer<typeof pinDisableSchema>;
 
 export const appearanceInputSchema = z
   .object({
-    palette: z.enum(["default", "slate", "warm", "forest", "rose"]),
-    accent: z.enum(["mono", "blue", "violet", "green", "amber", "rose"]),
+    palette: z.enum(["default", "slate", "warm", "forest", "rose", "plum", "sky"]),
+    accent: z.enum([
+      "mono", "blue", "violet", "green", "amber", "rose",
+      "cyan", "teal", "indigo", "orange", "pink", "lime",
+      "red", "fuchsia", "yellow",
+    ]),
     corners: z.enum(["sharp", "rounded", "round"]),
     density: z.enum(["compact", "comfortable", "cozy"]),
     background: z.object({
@@ -181,6 +185,12 @@ export const appearanceInputSchema = z
       // uploaded photo, so allow room for an absolute URL.
       preset: z.string().max(512),
       overlay: z.number().min(0).max(1),
+      // Repeating-tile size in px for pattern presets (smaller = denser). Bounds
+      // are looser than the slider's stops so rounding can't trip validation.
+      patternScale: z.number().min(4).max(48),
+      // Section (card/panel) opacity — 0.3..1, matching the "Section opacity"
+      // slider's 30–100% range.
+      surfaceAlpha: z.number().min(0.3).max(1),
     }),
   })
   .partial();

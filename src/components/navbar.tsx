@@ -65,7 +65,10 @@ export function Navbar({
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-surface/80 backdrop-blur">
+    // `[--surface-alpha:1]` keeps the nav solid regardless of the user's Section
+    // opacity setting — it stays a stable frame (its own 80% + blur), and its
+    // subtree (mobile menu, pills) inherits the full-opacity surface too.
+    <header className="sticky top-0 z-30 border-b border-border bg-surface/80 backdrop-blur [--surface-alpha:1]">
       <div className="flex h-14 w-full items-center px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-2 font-bold tracking-tight text-lg">
           <Image src="/icons/logo.png" alt={APP_NAME} width={40} height={40} className="rounded-md" priority unoptimized />

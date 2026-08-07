@@ -265,14 +265,30 @@ export type ThemeChoice = "light" | "dark" | "system";
 
 // UI customization layered on top of the light/dark `theme` (all expressed as
 // `data-*` attributes / CSS vars on <html>, so they compose with the mode).
-export type PaletteChoice = "default" | "slate" | "warm" | "forest" | "rose";
+export type PaletteChoice =
+  | "default"
+  | "slate"
+  | "warm"
+  | "forest"
+  | "rose"
+  | "plum"
+  | "sky";
 export type AccentChoice =
   | "mono"
   | "blue"
   | "violet"
   | "green"
   | "amber"
-  | "rose";
+  | "rose"
+  | "cyan"
+  | "teal"
+  | "indigo"
+  | "orange"
+  | "pink"
+  | "lime"
+  | "red"
+  | "fuchsia"
+  | "yellow";
 export type CornerChoice = "sharp" | "rounded" | "round";
 export type DensityChoice = "compact" | "comfortable" | "cozy";
 
@@ -282,8 +298,17 @@ export interface Appearance {
   corners: CornerChoice;
   density: DensityChoice;
   /** Background scenery. `preset` "none" = solid theme background; `overlay` is
-   *  0..1, how strongly the theme colour scrims over the pattern (readability). */
-  background: { preset: string; overlay: number };
+   *  0..1, how strongly the theme colour scrims over the pattern (readability);
+   *  `patternScale` is the repeating-tile size in px (smaller = denser), used
+   *  only by the pattern presets (grid/dots/crosshatch/rings); `surfaceAlpha`
+   *  (0.3..1) is how opaque section cards/panels are — lower lets more of the
+   *  scenery show through them. */
+  background: {
+    preset: string;
+    overlay: number;
+    patternScale: number;
+    surfaceAlpha: number;
+  };
 }
 
 export interface UserPrefs {

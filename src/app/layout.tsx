@@ -164,6 +164,8 @@ export default async function RootLayout({
   const photo = isImagePreset(bg.preset);
   const htmlStyle = {
     "--bg-overlay": String(bg.overlay),
+    "--bg-pattern-size": `${bg.patternScale}px`,
+    "--surface-alpha": String(bg.surfaceAlpha),
     ...(photo
       ? {
           "--bg-image": `url("${optimizedBgUrl(imageUrlFromPreset(bg.preset))}")`,

@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import { collection } from "./index";
 import { CURRENT_USER_ID } from "@/lib/config";
 import { DEFAULT_LOCK_DELAY_MS } from "@/lib/pin-lock";
+import { DEFAULT_PATTERN_SCALE } from "@/lib/backgrounds";
 import type {
   Task,
   TaskLog,
@@ -60,7 +61,12 @@ export function defaultUserPrefs(userId = CURRENT_USER_ID): UserPrefs {
       accent: "mono",
       corners: "rounded",
       density: "comfortable",
-      background: { preset: "none", overlay: 0.85 },
+      background: {
+        preset: "none",
+        overlay: 0.85,
+        patternScale: DEFAULT_PATTERN_SCALE,
+        surfaceAlpha: 1,
+      },
     },
     autoLockMs: DEFAULT_LOCK_DELAY_MS,
     // Empty = never chosen. The client auto-detects the browser zone on first
@@ -84,9 +90,22 @@ export const getUserPrefs = cache(
     // `autoLockMs`), so every consumer (layout, provider, settings) can rely on
     // the full shape.
     const defaults = defaultUserPrefs(userId);
+    // Deep-merge appearance so fields added after this doc was saved (e.g.
+    // `background.patternScale`) are always present — a shallow `?? defaults`
+    // would leave the nested background short a field for older docs.
+    const appearance = existing.appearance
+      ? {
+          ...defaults.appearance,
+          ...existing.appearance,
+          background: {
+            ...defaults.appearance.background,
+            ...existing.appearance.background,
+          },
+        }
+      : defaults.appearance;
     return {
       ...existing,
-      appearance: existing.appearance ?? defaults.appearance,
+      appearance,
       autoLockMs: existing.autoLockMs ?? defaults.autoLockMs,
     };
   },

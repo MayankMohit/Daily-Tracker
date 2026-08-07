@@ -19,6 +19,9 @@ import {
   imagePreset,
   optimizedBgUrl,
   MAX_BACKGROUND_IMAGES,
+  isPatternPreset,
+  MIN_PATTERN_SCALE,
+  MAX_PATTERN_SCALE,
 } from "@/lib/backgrounds";
 import { Skeleton } from "./ui";
 import type {
@@ -36,6 +39,15 @@ const ACCENTS: { value: AccentChoice; label: string; color: string }[] = [
   { value: "green", label: "Green", color: "#16a34a" },
   { value: "amber", label: "Amber", color: "#f59e0b" },
   { value: "rose", label: "Rose", color: "#e11d48" },
+  { value: "cyan", label: "Cyan", color: "#0891b2" },
+  { value: "teal", label: "Teal", color: "#0d9488" },
+  { value: "indigo", label: "Indigo", color: "#4f46e5" },
+  { value: "orange", label: "Orange", color: "#ea580c" },
+  { value: "pink", label: "Pink", color: "#db2777" },
+  { value: "lime", label: "Lime", color: "#65a30d" },
+  { value: "red", label: "Red", color: "#dc2626" },
+  { value: "fuchsia", label: "Fuchsia", color: "#c026d3" },
+  { value: "yellow", label: "Yellow", color: "#eab308" },
 ];
 
 const PALETTES: { value: PaletteChoice; label: string; color: string }[] = [
@@ -44,15 +56,23 @@ const PALETTES: { value: PaletteChoice; label: string; color: string }[] = [
   { value: "warm", label: "Warm", color: "#a8814f" },
   { value: "forest", label: "Forest", color: "#4d7c5a" },
   { value: "rose", label: "Rose", color: "#c15b76" },
+  { value: "plum", label: "Plum", color: "#8b5cf6" },
+  { value: "sky", label: "Sky", color: "#0ea5e9" },
 ];
 
 const BACKGROUNDS: { value: string; label: string }[] = [
   { value: "none", label: "None" },
   { value: "aurora", label: "Aurora" },
-  { value: "dusk", label: "Dusk" },
-  { value: "mesh", label: "Mesh" },
+  { value: "ocean", label: "Ocean" },
+  { value: "sunset", label: "Sunset" },
+  { value: "ember", label: "Ember" },
+  { value: "mint", label: "Mint" },
+  { value: "twilight", label: "Twilight" },
+  { value: "bloom", label: "Bloom" },
   { value: "grid", label: "Grid" },
   { value: "dots", label: "Dots" },
+  { value: "crosshatch", label: "Hatch" },
+  { value: "rings", label: "Rings" },
 ];
 
 const DENSITIES: { value: DensityChoice; label: string }[] = [
@@ -73,6 +93,42 @@ export function AppearanceSettings() {
   // Slider shows how *visible* the pattern is; the stored overlay is the inverse
   // (a higher scrim opacity = a fainter, more readable pattern).
   const visibility = Math.round((1 - appearance.background.overlay) * 100);
+  // How opaque the section cards/panels are (30–100%); lower reveals more of the
+  // background scenery through them.
+  const sectionOpacity = Math.round(appearance.background.surfaceAlpha * 100);
+
+  // Pattern-density control (only for the repeating-tile presets). Stored value is
+  // the tile size in px; the slider reads as "density" (higher = denser = smaller
+  // px). While dragging we drive the input from a fast local px value (`dragScale`)
+  // so the thumb tracks the cursor exactly, and push the change to the live
+  // background only once per animation frame — repainting a full-viewport tiled
+  // pattern on every input event stuttered and made the (controlled) thumb snap
+  // back. Releasing commits the final value and drops the local override.
+  const isPattern = isPatternPreset(appearance.background.preset);
+  const scaleSpan = MAX_PATTERN_SCALE - MIN_PATTERN_SCALE;
+  const [dragScale, setDragScale] = useState<number | null>(null);
+  const scaleRaf = useRef<number | null>(null);
+  const liveScale = dragScale ?? appearance.background.patternScale;
+  const density = Math.round(((MAX_PATTERN_SCALE - liveScale) / scaleSpan) * 100);
+
+  function applyPatternScale(scale: number) {
+    setAppearance({
+      background: { ...appearance.background, patternScale: scale },
+    });
+  }
+  function onDensityDrag(pct: number) {
+    const scale = MAX_PATTERN_SCALE - (pct / 100) * scaleSpan;
+    setDragScale(scale); // thumb follows immediately
+    if (scaleRaf.current !== null) cancelAnimationFrame(scaleRaf.current);
+    scaleRaf.current = requestAnimationFrame(() => applyPatternScale(scale));
+  }
+  function onDensityCommit() {
+    if (scaleRaf.current !== null) cancelAnimationFrame(scaleRaf.current);
+    if (dragScale !== null) {
+      applyPatternScale(dragScale);
+      setDragScale(null);
+    }
+  }
 
   // User-uploaded photos. `null` = still loading the list.
   const [images, setImages] = useState<BackgroundImage[] | null>(null);
@@ -321,6 +377,49 @@ export function AppearanceSettings() {
                   },
                 })
               }
+              className="w-full accent-accent"
+            />
+          </label>
+        )}
+
+        {bgOn && (
+          <label className="mt-3 block space-y-1">
+            <span className="flex items-center justify-between text-xs text-muted">
+              <span>Section opacity</span>
+              <span>{sectionOpacity}%</span>
+            </span>
+            <input
+              type="range"
+              min={85}
+              max={100}
+              value={sectionOpacity}
+              onChange={(e) =>
+                setAppearance({
+                  background: {
+                    ...appearance.background,
+                    surfaceAlpha: Number(e.target.value) / 100,
+                  },
+                })
+              }
+              className="w-full accent-accent"
+            />
+          </label>
+        )}
+
+        {isPattern && (
+          <label className="mt-3 block space-y-1">
+            <span className="flex items-center justify-between text-xs text-muted">
+              <span>Pattern density</span>
+              <span>{density}%</span>
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={density}
+              onChange={(e) => onDensityDrag(Number(e.target.value))}
+              onPointerUp={onDensityCommit}
+              onBlur={onDensityCommit}
               className="w-full accent-accent"
             />
           </label>

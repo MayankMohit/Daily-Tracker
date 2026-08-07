@@ -111,6 +111,40 @@
   --muted: #9a7f88;
 }
 
+[data-palette="plum"][data-theme="light"] {
+  --background: #faf7fc;
+  --surface: #ffffff;
+  --surface-2: #f3ecf7;
+  --border: #e7dbf0;
+  --foreground: #1f1626;
+  --muted: #6f6079;
+}
+[data-palette="plum"][data-theme="dark"] {
+  --background: #08060b;
+  --surface: #140f1a;
+  --surface-2: #1e1626;
+  --border: #2e2338;
+  --foreground: #e9e0f0;
+  --muted: #8f7f9c;
+}
+
+[data-palette="sky"][data-theme="light"] {
+  --background: #eef6fe;
+  --surface: #ffffff;
+  --surface-2: #dcecfd;
+  --border: #c2ddf7;
+  --foreground: #0b2138;
+  --muted: #4d6a8e;
+}
+[data-palette="sky"][data-theme="dark"] {
+  --background: #030812;
+  --surface: #0a1424;
+  --surface-2: #10203a;
+  --border: #1d3355;
+  --foreground: #d8e8f9;
+  --muted: #6d88ab;
+}
+
 /* ── Accent swatches ──────────────────────────────────────────────────────────
    `mono` = default (near-black/near-white, set by the theme blocks above, so no
    override). Placed after the palettes so equal-specificity accent rules win. */
@@ -135,11 +169,61 @@
   --accent: #e11d48;
   --accent-foreground: #ffffff;
 }
+[data-accent="cyan"] {
+  --accent: #0891b2;
+  --accent-foreground: #ffffff;
+}
+[data-accent="teal"] {
+  --accent: #0d9488;
+  --accent-foreground: #ffffff;
+}
+[data-accent="indigo"] {
+  --accent: #4f46e5;
+  --accent-foreground: #ffffff;
+}
+[data-accent="orange"] {
+  --accent: #ea580c;
+  --accent-foreground: #ffffff;
+}
+[data-accent="pink"] {
+  --accent: #db2777;
+  --accent-foreground: #ffffff;
+}
+[data-accent="lime"] {
+  --accent: #65a30d;
+  --accent-foreground: #ffffff;
+}
+[data-accent="red"] {
+  --accent: #dc2626;
+  --accent-foreground: #ffffff;
+}
+[data-accent="fuchsia"] {
+  --accent: #c026d3;
+  --accent-foreground: #ffffff;
+}
+[data-accent="yellow"] {
+  --accent: #eab308;
+  --accent-foreground: #2a2205;
+}
 
+/* Section translucency: `--surface-alpha` (0.3–1, from prefs "Section opacity")
+   fades the two surface tokens so the background scenery shows through cards and
+   panels. Applied here — at the single point every `bg-surface`/`bg-surface-2`
+   utility resolves — so it reaches sections on every page without touching each
+   component. Borders/text/shadows stay fully opaque, keeping edges crisp. The
+   `, 1` fallback means "fully solid" if the var is ever absent. */
 @theme inline {
   --color-background: var(--background);
-  --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
+  --color-surface: color-mix(
+    in srgb,
+    var(--surface) calc(var(--surface-alpha, 1) * 100%),
+    transparent
+  );
+  --color-surface-2: color-mix(
+    in srgb,
+    var(--surface-2) calc(var(--surface-alpha, 1) * 100%),
+    transparent
+  );
   --color-border: var(--border);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
@@ -236,35 +320,81 @@ body::after {
   --bg-size: cover;
   --bg-repeat: no-repeat;
 }
-[data-bg="dusk"] {
-  --bg-image: linear-gradient(160deg, #fb923c 0%, #a855f7 55%, #1e293b 100%);
+[data-bg="ocean"] {
+  --bg-image: linear-gradient(160deg, #0ea5e9 0%, #2563eb 55%, #0f172a 100%);
   --bg-size: cover;
   --bg-repeat: no-repeat;
 }
-[data-bg="mesh"] {
+[data-bg="sunset"] {
   --bg-image:
-    radial-gradient(at 30% 30%, #34d399 0px, transparent 50%),
-    radial-gradient(at 70% 60%, #60a5fa 0px, transparent 50%),
-    radial-gradient(at 50% 90%, #f472b6 0px, transparent 50%);
+    radial-gradient(at 15% 15%, #f97316 0px, transparent 45%),
+    radial-gradient(at 85% 10%, #ef4444 0px, transparent 45%),
+    radial-gradient(at 50% 95%, #a855f7 0px, transparent 50%);
   --bg-size: cover;
   --bg-repeat: no-repeat;
 }
+[data-bg="ember"] {
+  --bg-image: linear-gradient(160deg, #7c2d12 0%, #ea580c 55%, #f59e0b 100%);
+  --bg-size: cover;
+  --bg-repeat: no-repeat;
+}
+[data-bg="mint"] {
+  --bg-image:
+    radial-gradient(at 25% 25%, #34d399 0px, transparent 50%),
+    radial-gradient(at 75% 35%, #2dd4bf 0px, transparent 50%),
+    radial-gradient(at 55% 85%, #a7f3d0 0px, transparent 55%);
+  --bg-size: cover;
+  --bg-repeat: no-repeat;
+}
+[data-bg="twilight"] {
+  --bg-image: linear-gradient(160deg, #312e81 0%, #7c3aed 50%, #db2777 100%);
+  --bg-size: cover;
+  --bg-repeat: no-repeat;
+}
+[data-bg="bloom"] {
+  --bg-image:
+    radial-gradient(at 20% 30%, #f472b6 0px, transparent 48%),
+    radial-gradient(at 80% 25%, #e879f9 0px, transparent 48%),
+    radial-gradient(at 50% 90%, #fb7185 0px, transparent 50%);
+  --bg-size: cover;
+  --bg-repeat: no-repeat;
+}
+/* Repeating patterns. Their tile size is the user-tunable `--bg-pattern-size`
+   (Settings "Pattern density" slider); smaller = denser. The fallback keeps them
+   dense if the var is ever missing. Feature sizes (line/dot/ring widths) stay
+   fixed so only the spacing scales. */
 [data-bg="grid"] {
   --bg-image:
     linear-gradient(var(--border) 1px, transparent 1px),
     linear-gradient(90deg, var(--border) 1px, transparent 1px);
-  --bg-size: 32px 32px;
+  --bg-size: var(--bg-pattern-size, 14px) var(--bg-pattern-size, 14px);
   --bg-repeat: repeat;
 }
 [data-bg="dots"] {
   --bg-image: radial-gradient(var(--border) 1.25px, transparent 1.25px);
-  --bg-size: 22px 22px;
+  --bg-size: var(--bg-pattern-size, 14px) var(--bg-pattern-size, 14px);
+  --bg-repeat: repeat;
+}
+[data-bg="crosshatch"] {
+  --bg-image:
+    repeating-linear-gradient(45deg, var(--border) 0 1px, transparent 1px var(--bg-pattern-size, 14px)),
+    repeating-linear-gradient(-45deg, var(--border) 0 1px, transparent 1px var(--bg-pattern-size, 14px));
+  --bg-size: auto;
+  --bg-repeat: repeat;
+}
+[data-bg="rings"] {
+  --bg-image: radial-gradient(circle, transparent 0 2px, var(--border) 2px 3px, transparent 3px);
+  --bg-size: var(--bg-pattern-size, 14px) var(--bg-pattern-size, 14px);
   --bg-repeat: repeat;
 }
 
 /* Preview tile for the Settings background picker: reuses the `[data-bg]` vars
    above (set on the tile itself) so previews stay in sync with the real thing. */
 .bg-swatch {
+  /* Pin a fixed, tidy density for the picker previews so pattern tiles always
+     look their best — independent of the user's live "Pattern density" setting
+     (which only affects the real background, not these thumbnails). */
+  --bg-pattern-size: 9px;
   background-image: var(--bg-image, none);
   background-size: var(--bg-size, cover);
   background-position: center;

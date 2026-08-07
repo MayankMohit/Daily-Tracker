@@ -7,7 +7,22 @@
 export const IMAGE_PREFIX = "img:";
 
 /** Most photos a single user may keep uploaded at once. */
-export const MAX_BACKGROUND_IMAGES = 5;
+export const MAX_BACKGROUND_IMAGES = 6;
+
+/** Repeating-tile presets (as opposed to gradients/photos). These honour the
+ *  user's pattern-density setting via the `--bg-pattern-size` CSS var. */
+export const PATTERN_PRESETS = ["grid", "dots", "crosshatch", "rings"] as const;
+
+export function isPatternPreset(preset: string): boolean {
+  return (PATTERN_PRESETS as readonly string[]).includes(preset);
+}
+
+// Pattern tile size in px — smaller = denser. The Settings slider maps its
+// 0–100 "density" onto this range (denser at 100). Kept low by default so
+// patterns read as a fine texture rather than a coarse grid.
+export const MIN_PATTERN_SCALE = 6;
+export const MAX_PATTERN_SCALE = 40;
+export const DEFAULT_PATTERN_SCALE = 14;
 
 export function isImagePreset(preset: string): boolean {
   return preset.startsWith(IMAGE_PREFIX);

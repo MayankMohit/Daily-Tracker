@@ -253,7 +253,9 @@ function LockScreen({
   }
 
   return (
-    <div className="fixed inset-0 z-100 flex items-center justify-center bg-surface p-4">
+    // `[--surface-alpha:1]` forces the lock screen fully opaque no matter the
+    // user's Section opacity — a see-through lock would defeat the whole point.
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-surface p-4 [--surface-alpha:1]">
       <div
         className={cn(
           "w-full max-w-xs space-y-6 text-center",
