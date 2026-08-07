@@ -12,7 +12,7 @@
  *    IndexedDB outbox); on reconnect a Background Sync nudges the app to replay.
  */
 
-const VERSION = "v3";
+const VERSION = "v4";
 const SHELL_CACHE = `dt-shell-${VERSION}`;
 const ASSET_CACHE = `dt-assets-${VERSION}`;
 const DATA_CACHE = `dt-data-${VERSION}`;
@@ -41,20 +41,28 @@ self.addEventListener("install", (event) => {
     (async () => {
       const cache = await caches.open(SHELL_CACHE);
       await cache.addAll(SHELL_ASSETS);
-      await Promise.all(
-        PRECACHE_ROUTES.map(async (route) => {
-          try {
-            const res = await fetch(route, { credentials: "same-origin" });
-            if (res.ok) await cache.put(route, res.clone());
-          } catch {
-            /* offline / redirect at install — runtime caching will pick it up */
-          }
-        }),
-      );
+      await warmRoutes(cache);
     })(),
   );
   self.skipWaiting();
 });
+
+// Fetch + cache each app route's document so the first *offline* open of a page
+// works even if it wasn't visited this session. Per-route best-effort (one
+// failure can't abort the rest); skips redirects so an auth handshake/sign-in
+// response is never cached in place of a real page.
+async function warmRoutes(cache) {
+  await Promise.all(
+    PRECACHE_ROUTES.map(async (route) => {
+      try {
+        const res = await fetch(route, { credentials: "same-origin" });
+        if (res.ok && !res.redirected) await cache.put(route, res.clone());
+      } catch {
+        /* offline right now — the client re-warms once back online */
+      }
+    }),
+  );
+}
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
@@ -98,6 +106,29 @@ function isRscRequest(request, url) {
   return request.headers.get("RSC") === "1" || url.searchParams.has("_rsc");
 }
 
+// RSC requests carry a per-navigation `?_rsc=<hash>` that changes between
+// prefetch and navigation, so caching them by full URL would miss on every
+// offline navigation. Key them by pathname instead (stable per route).
+function rscKey(url) {
+  return url.origin + url.pathname + "#rsc";
+}
+
+async function rscNetworkFirst(request, url) {
+  const cache = await caches.open(DATA_CACHE);
+  const key = rscKey(url);
+  try {
+    const res = await fetch(request);
+    if (res.ok) cache.put(key, res.clone());
+    return res;
+  } catch {
+    const cached = await cache.match(key);
+    if (cached) return cached;
+    // No cached RSC → let it fail so Next falls back to a full navigation, which
+    // the navigate handler serves from the cached document (or the offline page).
+    throw new Error("offline and no rsc cache");
+  }
+}
+
 async function staleWhileRevalidate(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
@@ -132,7 +163,7 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (isRscRequest(request, url)) {
-    event.respondWith(networkFirst(request, DATA_CACHE));
+    event.respondWith(rscNetworkFirst(request, url));
     return;
   }
   if (request.mode === "navigate") {
@@ -146,6 +177,15 @@ self.addEventListener("fetch", (event) => {
   if (isCacheableData(url)) {
     event.respondWith(networkFirst(request, DATA_CACHE));
     return;
+  }
+});
+
+// Client-triggered cache warming. Runs while the app is open and authenticated
+// (more reliable than the install-time fetch under Clerk auth), so every route's
+// document is cached for offline use even before the user visits it.
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "warm-routes") {
+    event.waitUntil(caches.open(SHELL_CACHE).then((cache) => warmRoutes(cache)));
   }
 });
 
