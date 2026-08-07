@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { z } from "zod";
 import { checkRate, RateLimitError } from "@/lib/rate-limit";
+import { DatabaseUnavailableError } from "@/lib/store/errors";
 
 // General per-user burst cap applied to every API route (AI routes add their own
 // per-minute + daily caps on top). Tunable via env for tighter/looser policies.
@@ -69,6 +70,10 @@ export function handler<A extends unknown[]>(
         return fail(err.message, 429, undefined, {
           "Retry-After": String(err.retryAfter),
         });
+      }
+      // Database unreachable — a transient 503, not a code bug.
+      if (err instanceof DatabaseUnavailableError) {
+        return fail(err.message, 503);
       }
       const message =
         err instanceof Error ? err.message : "Unexpected server error";

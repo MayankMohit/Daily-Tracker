@@ -14,6 +14,28 @@
 
 import mongoose from "mongoose";
 import type { Collection, Doc, StoreFilter } from "./local-store";
+import { DatabaseUnavailableError, isConnectivityError } from "./errors";
+
+/** Wrap every method of a collection so a connectivity failure surfaces as a
+ *  clean, serializable DatabaseUnavailableError instead of a raw Mongoose error
+ *  (whose nested class instances break React Flight serialization). Genuine app
+ *  errors pass through unchanged. Types are preserved — only the runtime behaviour
+ *  of each async method is wrapped. */
+function guardAll<T extends Doc>(impl: Collection<T>): Collection<T> {
+  const wrapped = {} as Record<string, unknown>;
+  for (const [key, value] of Object.entries(impl)) {
+    const fn = value as (...args: unknown[]) => Promise<unknown>;
+    wrapped[key] = async (...args: unknown[]) => {
+      try {
+        return await fn(...args);
+      } catch (err) {
+        if (isConnectivityError(err)) throw new DatabaseUnavailableError();
+        throw err;
+      }
+    };
+  }
+  return wrapped as unknown as Collection<T>;
+}
 
 // Cache the connection promise on the global object so Next's dev hot-reload and
 // the separate route/render module instances all share one pooled connection.
@@ -65,7 +87,10 @@ function makeCollection<T extends Doc>(name: string): Collection<T> {
     return docs as unknown as T[];
   };
 
-  return {
+  // Method bodies stay contextually typed against `Collection<T>`; `guardAll`
+  // wraps them so a connectivity failure in any of them becomes a clean
+  // DatabaseUnavailableError (see ./errors).
+  const impl: Collection<T> = {
     all: async () => (await load()).map((d) => clean<T>(d)),
     find: async (pred, filter) =>
       (await load(filter)).filter(pred).map((d) => clean<T>(d)),
@@ -140,6 +165,8 @@ function makeCollection<T extends Doc>(name: string): Collection<T> {
       return updated ? clean<T>(updated) : null;
     },
   };
+
+  return guardAll(impl);
 }
 
 const collections = new Map<string, Collection<Doc>>();

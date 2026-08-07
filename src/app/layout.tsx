@@ -11,7 +11,11 @@ import { NoContextMenu } from "@/components/no-context-menu";
 import { PinGate } from "@/components/pin/pin-gate";
 import { isPinEnabled } from "@/lib/services/pin";
 import { getUserPrefs, defaultUserPrefs } from "@/lib/store/db";
-import { isPhotoPreset, photoFile, photoUrl } from "@/lib/backgrounds";
+import {
+  isImagePreset,
+  imageUrlFromPreset,
+  optimizedBgUrl,
+} from "@/lib/backgrounds";
 import {
   APP_NAME,
   APP_TAGLINE,
@@ -121,6 +125,7 @@ export default async function RootLayout({
   // HTML — the customized look paints immediately with no flash of the default.
   let pinEnabled = false;
   let appearance = defaultUserPrefs().appearance;
+  let autoLockMs = defaultUserPrefs().autoLockMs;
   // Empty until the user has a saved zone; drives first-load auto-detection in
   // <TimezoneSync>, keyed to this account's server value (not a per-browser flag).
   let timezone = "";
@@ -132,6 +137,7 @@ export default async function RootLayout({
       // this reuses that read rather than hitting the store again.
       const prefs = await getUserPrefs(userId);
       appearance = prefs.appearance;
+      autoLockMs = prefs.autoLockMs;
       timezone = prefs.timezone;
     }
   } catch {
@@ -155,12 +161,12 @@ export default async function RootLayout({
   // Photos render via an inline `--bg-image` (CSS gradients render via `data-bg`);
   // set it server-side so a photo background is correct on first paint too.
   const bg = appearance.background;
-  const photo = isPhotoPreset(bg.preset);
+  const photo = isImagePreset(bg.preset);
   const htmlStyle = {
     "--bg-overlay": String(bg.overlay),
     ...(photo
       ? {
-          "--bg-image": `url("${photoUrl(photoFile(bg.preset))}")`,
+          "--bg-image": `url("${optimizedBgUrl(imageUrlFromPreset(bg.preset))}")`,
           "--bg-size": "cover",
           "--bg-repeat": "no-repeat",
         }
@@ -201,7 +207,7 @@ export default async function RootLayout({
           </ThemeProvider>
           {/* Only renders a screen when the PIN is on; `pinEnabled` is derived
               from the signed-in user, and PinGate also self-hides if signed out. */}
-          <PinGate initialEnabled={pinEnabled} />
+          <PinGate initialEnabled={pinEnabled} initialAutoLockMs={autoLockMs} />
           <TimezoneSync timezone={timezone} />
           <ServiceWorkerRegister />
           <NoContextMenu />

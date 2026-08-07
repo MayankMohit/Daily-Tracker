@@ -60,6 +60,14 @@ export function SettingsForm({ initial }: { initial: UserPrefs }) {
     }
   }
 
+  // Merge-and-save a single AI pref. The server treats `ai` as a partial merge,
+  // but we send the full object so local state and the store stay in lockstep.
+  function updateAi(patch: Partial<UserPrefs["ai"]>) {
+    const next = { ...ai, ...patch };
+    setAi(next);
+    persist({ ai: next });
+  }
+
   // Save a timezone, then let the navbar's day control recompute against it —
   // the day boundary and 6 PM cutoff are timezone-dependent. We broadcast only
   // after the write lands so the control's `syncActiveDay` reads the new value.
@@ -118,15 +126,16 @@ export function SettingsForm({ initial }: { initial: UserPrefs }) {
           </div>
         </Field>
 
-        <Field label="AI tone">
+        <Field
+          label="AI tone"
+          hint="The voice used when you generate insights. Insights are only created when you ask for them."
+        >
           <select
             className={inputClass}
             value={ai.tone}
-            onChange={(e) => {
-              const next = { ...ai, tone: e.target.value as typeof ai.tone };
-              setAi(next);
-              persist({ ai: next });
-            }}
+            onChange={(e) =>
+              updateAi({ tone: e.target.value as typeof ai.tone })
+            }
           >
             <option value="encouraging">Encouraging</option>
             <option value="neutral">Neutral</option>

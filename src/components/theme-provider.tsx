@@ -15,7 +15,11 @@ import {
 } from "react";
 import type { Appearance, ThemeChoice } from "@/lib/types";
 import { api } from "@/lib/client";
-import { isPhotoPreset, photoFile, photoUrl } from "@/lib/backgrounds";
+import {
+  isImagePreset,
+  imageUrlFromPreset,
+  optimizedBgUrl,
+} from "@/lib/backgrounds";
 
 const STORAGE_KEY = "dt-theme";
 
@@ -50,9 +54,12 @@ function applyAppearance(a: Appearance) {
   // (the CSS can't know the file names). Clear any inline image when switching
   // back to a gradient/none so the CSS rule wins again.
   const preset = a.background.preset;
-  if (isPhotoPreset(preset)) {
+  if (isImagePreset(preset)) {
     el.setAttribute("data-bg", "photo");
-    el.style.setProperty("--bg-image", `url("${photoUrl(photoFile(preset))}")`);
+    el.style.setProperty(
+      "--bg-image",
+      `url("${optimizedBgUrl(imageUrlFromPreset(preset))}")`,
+    );
     el.style.setProperty("--bg-size", "cover");
     el.style.setProperty("--bg-repeat", "no-repeat");
   } else {

@@ -6,6 +6,7 @@ import { cache } from "react";
 import { nanoid } from "nanoid";
 import { collection } from "./index";
 import { CURRENT_USER_ID } from "@/lib/config";
+import { DEFAULT_LOCK_DELAY_MS } from "@/lib/pin-lock";
 import type {
   Task,
   TaskLog,
@@ -13,6 +14,7 @@ import type {
   JournalEntry,
   JournalKeyDoc,
   ExtraActivity,
+  BackgroundImage,
   DailyPlanRequest,
   DailyPlan,
   AiInsight,
@@ -35,6 +37,7 @@ export const db = {
   journalEntries: collection<JournalEntry>("journalEntries"),
   journalKeys: collection<JournalKeyDoc>("journalKeys"),
   extraActivities: collection<ExtraActivity>("extraActivities"),
+  backgroundImages: collection<BackgroundImage>("backgroundImages"),
   dailyPlanRequests: collection<DailyPlanRequest>("dailyPlanRequests"),
   dailyPlans: collection<DailyPlan>("dailyPlans"),
   aiInsights: collection<AiInsight>("aiInsights"),
@@ -59,17 +62,14 @@ export function defaultUserPrefs(userId = CURRENT_USER_ID): UserPrefs {
       density: "comfortable",
       background: { preset: "none", overlay: 0.85 },
     },
+    autoLockMs: DEFAULT_LOCK_DELAY_MS,
     // Empty = never chosen. The client auto-detects the browser zone on first
     // load and saves it (see components/timezone-sync). Until then, day-boundary
     // logic falls back to DEFAULT_TIMEZONE via `prefs.timezone || …`.
     timezone: "",
     workingHours: { wake: "07:00", sleep: "23:00" },
     ai: {
-      frequency: "daily",
       tone: "encouraging",
-      journalInformedByDefault: false,
-      moodCorrelation: true,
-      extraActivityAutoTag: false,
     },
   };
 }
@@ -80,10 +80,14 @@ export const getUserPrefs = cache(
   async (userId = CURRENT_USER_ID): Promise<UserPrefs> => {
     const existing = await db.userPrefs.findById(userId);
     if (!existing) return defaultUserPrefs(userId);
-    // Backfill `appearance` for docs saved before the field existed, so every
-    // consumer (layout, provider, settings) can rely on the full shape.
-    return existing.appearance
-      ? existing
-      : { ...existing, appearance: defaultUserPrefs(userId).appearance };
+    // Backfill fields added after this doc was first saved (`appearance`,
+    // `autoLockMs`), so every consumer (layout, provider, settings) can rely on
+    // the full shape.
+    const defaults = defaultUserPrefs(userId);
+    return {
+      ...existing,
+      appearance: existing.appearance ?? defaults.appearance,
+      autoLockMs: existing.autoLockMs ?? defaults.autoLockMs,
+    };
   },
 );

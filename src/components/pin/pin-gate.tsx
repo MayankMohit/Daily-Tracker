@@ -19,11 +19,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { api } from "@/lib/client";
 import { cn } from "@/lib/cn";
+import { AUTO_LOCK_EVENT, nearestLockDelayMs } from "@/lib/pin-lock";
 
 const UNLOCK_KEY = "pin-unlocked";
-// Lock after the tab has been hidden/minimized this long (a quick tab-switch back
-// within the window won't lock).
-const GRACE_MS = 60_000;
 
 function markUnlocked() {
   try {
@@ -47,12 +45,31 @@ function isUnlockedThisSession(): boolean {
   }
 }
 
-export function PinGate({ initialEnabled }: { initialEnabled: boolean }) {
+export function PinGate({
+  initialEnabled,
+  initialAutoLockMs,
+}: {
+  initialEnabled: boolean;
+  /** Server-saved auto-lock delay (ms) — how long hidden before we re-lock. */
+  initialAutoLockMs: number;
+}) {
   const { isSignedIn } = useAuth();
   const [enabled, setEnabled] = useState(initialEnabled);
   // Start matching the SSR value (no hydration mismatch); a mount effect unlocks
   // this tab if it already unlocked this session.
   const [locked, setLocked] = useState(initialEnabled);
+  // How long the tab can be hidden before we re-lock (a quick tab-switch back
+  // within the window won't lock). Seeded from the server-saved pref; the Settings
+  // slider broadcasts AUTO_LOCK_EVENT so a change re-arms the timer without a reload.
+  const [graceMs, setGraceMs] = useState(() => nearestLockDelayMs(initialAutoLockMs));
+  useEffect(() => {
+    const sync = (e: Event) => {
+      const ms = (e as CustomEvent<number>).detail;
+      if (typeof ms === "number") setGraceMs(nearestLockDelayMs(ms));
+    };
+    window.addEventListener(AUTO_LOCK_EVENT, sync);
+    return () => window.removeEventListener(AUTO_LOCK_EVENT, sync);
+  }, []);
 
   const lock = useCallback(() => {
     clearUnlocked();
@@ -95,9 +112,21 @@ export function PinGate({ initialEnabled }: { initialEnabled: boolean }) {
     };
   }, [lock]);
 
-  // Auto-lock after the tab is hidden/minimized for GRACE_MS. The timestamp check
-  // on return is authoritative (background timers get throttled); the timer is a
-  // best-effort proactive lock while still hidden.
+  // Warm the unlock path the moment the lock screen goes up, so the verify
+  // round-trip on submit is fast and the reveal feels instant. The page beneath is
+  // already server-rendered behind this overlay — the only latency between typing
+  // the 4th digit and seeing it is the PATCH /api/pin call, which otherwise pays a
+  // cold cost each time: Clerk auth, opening the DB connection pool, and (in dev)
+  // compiling the route. A cheap GET to the same route primes all three during the
+  // seconds the user spends typing. Fire-and-forget; failures are irrelevant.
+  useEffect(() => {
+    if (!(enabled && locked)) return;
+    fetch("/api/pin", { method: "GET" }).catch(() => {});
+  }, [enabled, locked]);
+
+  // Auto-lock after the tab is hidden/minimized for the grace period. The timestamp
+  // check on return is authoritative (background timers get throttled); the timer is
+  // a best-effort proactive lock while still hidden.
   useEffect(() => {
     if (!enabled) return;
     let hiddenAt = 0;
@@ -105,10 +134,10 @@ export function PinGate({ initialEnabled }: { initialEnabled: boolean }) {
     const onVisibility = () => {
       if (document.hidden) {
         hiddenAt = Date.now();
-        timer = setTimeout(lock, GRACE_MS);
+        timer = setTimeout(lock, graceMs);
       } else {
         if (timer) clearTimeout(timer);
-        if (hiddenAt && Date.now() - hiddenAt >= GRACE_MS) lock();
+        if (hiddenAt && Date.now() - hiddenAt >= graceMs) lock();
         hiddenAt = 0;
       }
     };
@@ -117,7 +146,7 @@ export function PinGate({ initialEnabled }: { initialEnabled: boolean }) {
       document.removeEventListener("visibilitychange", onVisibility);
       if (timer) clearTimeout(timer);
     };
-  }, [enabled, lock]);
+  }, [enabled, lock, graceMs]);
 
   // Freeze background scroll while the screen is up (matches Modal behaviour).
   useEffect(() => {

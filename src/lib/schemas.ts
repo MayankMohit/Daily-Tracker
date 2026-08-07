@@ -3,6 +3,7 @@
 // gives us clean parse/validate for the future Gemini auto-create fallback (§3.2).
 
 import { z } from "zod";
+import { LOCK_DELAY_VALUES } from "@/lib/pin-lock";
 
 const dayKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
 const timeStr = z
@@ -176,7 +177,9 @@ export const appearanceInputSchema = z
     corners: z.enum(["sharp", "rounded", "round"]),
     density: z.enum(["compact", "comfortable", "cozy"]),
     background: z.object({
-      preset: z.string().max(40),
+      // A gradient keyword ("none", "aurora", …) or `img:<blob URL>` for an
+      // uploaded photo, so allow room for an absolute URL.
+      preset: z.string().max(512),
       overlay: z.number().min(0).max(1),
     }),
   })
@@ -185,17 +188,18 @@ export const appearanceInputSchema = z
 export const userPrefsInputSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),
   appearance: appearanceInputSchema.optional(),
+  // Auto-lock delay must be one of the fixed stops (see lib/pin-lock).
+  autoLockMs: z
+    .number()
+    .refine((n) => LOCK_DELAY_VALUES.includes(n), "Invalid auto-lock delay")
+    .optional(),
   timezone: z.string().optional(),
   workingHours: z
     .object({ wake: z.string(), sleep: z.string() })
     .optional(),
   ai: z
     .object({
-      frequency: z.enum(["daily", "daily+weekly", "off"]),
       tone: z.enum(["encouraging", "neutral", "blunt"]),
-      journalInformedByDefault: z.boolean(),
-      moodCorrelation: z.boolean(),
-      extraActivityAutoTag: z.boolean(),
     })
     .partial()
     .optional(),

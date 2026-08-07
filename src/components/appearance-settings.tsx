@@ -5,16 +5,25 @@
 // change to <html> instantly (live preview) and debounce-saves it to the server —
 // so these settings sync across the user's devices. Light/dark stays on the
 // separate ThemeToggle; palettes re-tint the neutrals and still honour the mode.
+//
+// The Background section also lets the user upload their own photos: they're
+// compressed in the browser (lib/image-compress), stored in Vercel Blob via
+// /api/backgrounds, and served through Next's image optimizer.
 
+import { useEffect, useRef, useState } from "react";
 import { useAppearance } from "./theme-provider";
 import { cn } from "@/lib/cn";
+import { api } from "@/lib/client";
+import { compressImage } from "@/lib/image-compress";
 import {
-  PHOTO_BACKGROUNDS,
-  PHOTO_PREFIX,
-  photoUrl,
+  imagePreset,
+  optimizedBgUrl,
+  MAX_BACKGROUND_IMAGES,
 } from "@/lib/backgrounds";
+import { Skeleton } from "./ui";
 import type {
   AccentChoice,
+  BackgroundImage,
   CornerChoice,
   DensityChoice,
   PaletteChoice,
@@ -64,6 +73,66 @@ export function AppearanceSettings() {
   // Slider shows how *visible* the pattern is; the stored overlay is the inverse
   // (a higher scrim opacity = a fainter, more readable pattern).
   const visibility = Math.round((1 - appearance.background.overlay) * 100);
+
+  // User-uploaded photos. `null` = still loading the list.
+  const [images, setImages] = useState<BackgroundImage[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .get<BackgroundImage[]>("/api/backgrounds")
+      .then((rows) => live && setImages(rows))
+      .catch(() => live && setImages([]));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const atLimit = (images?.length ?? 0) >= MAX_BACKGROUND_IMAGES;
+
+  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the same file be re-picked later
+    if (!file) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const { file: compressed } = await compressImage(file);
+      const form = new FormData();
+      form.append("file", compressed);
+      const res = await fetch("/api/backgrounds", { method: "POST", body: form });
+      const json = (await res.json()) as
+        | { ok: true; data: BackgroundImage }
+        | { ok: false; error: string };
+      if (!json.ok) throw new Error(json.error || "Upload failed");
+      const img = json.data;
+      setImages((prev) => [img, ...(prev ?? [])]);
+      // Select the new photo straight away so the change is visible.
+      setAppearance({ background: { ...appearance.background, preset: imagePreset(img.url) } });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onDelete(img: BackgroundImage) {
+    setError(null);
+    setImages((prev) => (prev ?? []).filter((i) => i._id !== img._id));
+    // If the deleted photo was the active background, fall back to a plain one.
+    if (appearance.background.preset === imagePreset(img.url)) {
+      setAppearance({ background: { ...appearance.background, preset: "none" } });
+    }
+    try {
+      await api.del(`/api/backgrounds/${img._id}`);
+    } catch {
+      setImages((prev) => [img, ...(prev ?? [])]);
+      setError("Couldn't delete that image. Try again.");
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -139,34 +208,100 @@ export function AppearanceSettings() {
               <span className="block text-[11px] text-muted">{b.label}</span>
             </button>
           ))}
-
-          {PHOTO_BACKGROUNDS.map((p) => {
-            const value = PHOTO_PREFIX + p.file;
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() =>
-                  setAppearance({
-                    background: { ...appearance.background, preset: value },
-                  })
-                }
-                className={cn(
-                  "space-y-1 rounded-lg border p-1 text-center transition-colors",
-                  appearance.background.preset === value
-                    ? "border-foreground"
-                    : "border-border hover:border-foreground/40",
-                )}
-              >
-                <span
-                  className="block h-10 w-full rounded-md border border-border bg-surface-2 bg-cover bg-center"
-                  style={{ backgroundImage: `url("${photoUrl(p.file)}")` }}
-                />
-                <span className="block text-[11px] text-muted">{p.label}</span>
-              </button>
-            );
-          })}
         </div>
+
+        {/* Uploaded photos */}
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted">Your photos</span>
+            <span className="text-[11px] text-muted">
+              {(images?.length ?? 0)}/{MAX_BACKGROUND_IMAGES}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+            {images === null ? (
+              <>
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </>
+            ) : (
+              images.map((img) => {
+                const selected =
+                  appearance.background.preset === imagePreset(img.url);
+                return (
+                  <div key={img._id} className="relative">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAppearance({
+                          background: {
+                            ...appearance.background,
+                            preset: imagePreset(img.url),
+                          },
+                        })
+                      }
+                      className={cn(
+                        "block w-full rounded-lg border p-1 transition-colors",
+                        selected
+                          ? "border-foreground"
+                          : "border-border hover:border-foreground/40",
+                      )}
+                    >
+                      <span
+                        className="block h-14 w-full rounded-md border border-border bg-surface-2 bg-cover bg-center"
+                        style={{
+                          backgroundImage: `url("${optimizedBgUrl(img.url, 640)}")`,
+                        }}
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(img)}
+                      aria-label="Delete background photo"
+                      title="Delete"
+                      className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-xs leading-none text-white transition-colors hover:bg-black/80"
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })
+            )}
+
+            {images !== null && !atLimit && (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={busy}
+                className="flex min-h-16 w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border p-1 text-muted transition-colors hover:border-foreground/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="text-lg leading-none">{busy ? "…" : "+"}</span>
+                <span className="text-[11px]">
+                  {busy ? "Uploading" : "Upload"}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {atLimit && (
+            <p className="text-[11px] text-muted">
+              You&rsquo;ve reached the {MAX_BACKGROUND_IMAGES}-photo limit. Delete
+              one to add another.
+            </p>
+          )}
+          {error && <p className="text-xs text-danger">{error}</p>}
+
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={onPick}
+          />
+        </div>
+
         {bgOn && (
           <label className="mt-3 block space-y-1">
             <span className="flex items-center justify-between text-xs text-muted">

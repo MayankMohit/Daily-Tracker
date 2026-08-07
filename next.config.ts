@@ -9,6 +9,20 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
+  images: {
+    // Allow the built-in optimizer to serve user background photos stored in
+    // Vercel Blob (see lib/services/backgrounds). Public store hostnames look
+    // like `<id>.public.blob.vercel-storage.com`.
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**.public.blob.vercel-storage.com",
+      },
+    ],
+    // Next 16 requires an explicit allowlist; matches the quality used by
+    // optimizedBgUrl() (kept high so backgrounds aren't visibly compressed).
+    qualities: [75, 90],
+  },
 };
 
 export default nextConfig;

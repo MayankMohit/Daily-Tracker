@@ -28,6 +28,7 @@ export async function saveUserPrefs(
   const next: UserPrefs = {
     ...current,
     theme: parsed.theme ?? current.theme,
+    autoLockMs: parsed.autoLockMs ?? current.autoLockMs ?? defaultUserPrefs(userId).autoLockMs,
     appearance: {
       ...baseAppearance,
       ...parsed.appearance,

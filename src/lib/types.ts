@@ -197,6 +197,19 @@ export interface PinLockDoc {
   updatedAt: string;
 }
 
+/** A user-uploaded background photo, stored in Vercel Blob. The `pathname` is
+ *  kept so the object can be deleted from Blob when the user removes it. Capped
+ *  per user (see MAX_BACKGROUND_IMAGES). */
+export interface BackgroundImage {
+  _id: string;
+  userId: string;
+  /** Public Blob URL — what the background CSS points at (via the optimizer). */
+  url: string;
+  /** Blob object pathname (`backgrounds/<userId>/<id>.<ext>`), used for deletes. */
+  pathname: string;
+  createdAt: string;
+}
+
 export interface DailyPlanRequest {
   _id: string;
   userId: string;
@@ -248,7 +261,6 @@ export interface AiUsageCounter {
 }
 
 export type AiTone = "encouraging" | "neutral" | "blunt";
-export type AiFrequency = "daily" | "daily+weekly" | "off";
 export type ThemeChoice = "light" | "dark" | "system";
 
 // UI customization layered on top of the light/dark `theme` (all expressed as
@@ -279,14 +291,13 @@ export interface UserPrefs {
   userId: string;
   theme: ThemeChoice;
   appearance: Appearance;
+  /** App-lock auto-lock delay in ms — how long the tab can be hidden before the
+   *  PIN gate re-locks. One of the fixed stops in `lib/pin-lock`. */
+  autoLockMs: number;
   timezone: string;
   /** Day Planner window, e.g. { wake: "07:00", sleep: "23:00" }. */
   workingHours: { wake: string; sleep: string };
   ai: {
-    frequency: AiFrequency;
     tone: AiTone;
-    journalInformedByDefault: boolean;
-    moodCorrelation: boolean;
-    extraActivityAutoTag: boolean;
   };
 }

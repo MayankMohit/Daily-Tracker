@@ -7,9 +7,14 @@
 // removal path can't be used to bypass the lock. On enable/disable it broadcasts a
 // window event so the PinGate and the navbar lock button react immediately.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
 import { Card, Field, inputClass, Button } from "@/components/ui";
+import {
+  AUTO_LOCK_EVENT,
+  LOCK_DELAY_OPTIONS,
+  lockDelayIndex,
+} from "@/lib/pin-lock";
 
 const PIN_RE = /^\d{4}$/;
 // idle → status row; enabling/changing → PIN form; disabling/recovery → single
@@ -31,7 +36,7 @@ function pinField(value: string, onChange: (v: string) => void, placeholder: str
   );
 }
 
-export function PinSettings() {
+export function PinSettings({ initialAutoLockMs }: { initialAutoLockMs: number }) {
   const [enabled, setEnabled] = useState<boolean | null>(null); // null = loading
   const [hasCode, setHasCode] = useState(false);
   const [mode, setMode] = useState<Mode>("idle");
@@ -270,6 +275,12 @@ export function PinSettings() {
           </div>
 
           {enabled && (
+            <div className="border-t border-border pt-3">
+              <AutoLockSlider initialMs={initialAutoLockMs} />
+            </div>
+          )}
+
+          {enabled && (
             <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
               <div className="min-w-0">
                 <p className="text-xs font-medium">Recovery code</p>
@@ -340,4 +351,54 @@ function RecoveryReveal({
 
 function pinFieldWrapper(label: string, input: React.ReactNode) {
   return <Field label={label}>{input}</Field>;
+}
+
+// Discrete slider for how long the tab can be hidden/minimized before the app
+// re-locks. Saved to UserPrefs (server-backed, synced across devices) via
+// PATCH /api/prefs; the range input snaps to one of the fixed stops (its value is
+// the option's index). Broadcasts AUTO_LOCK_EVENT so a live PinGate re-arms at once.
+function AutoLockSlider({ initialMs }: { initialMs: number }) {
+  const last = LOCK_DELAY_OPTIONS.length - 1;
+  const [index, setIndex] = useState(() => lockDelayIndex(initialMs));
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  function change(i: number) {
+    setIndex(i);
+    const ms = LOCK_DELAY_OPTIONS[i].ms;
+    // Update any open gate immediately; debounce the save so a drag across stops
+    // doesn't fire a request per stop.
+    window.dispatchEvent(new CustomEvent(AUTO_LOCK_EVENT, { detail: ms }));
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      api.patch("/api/prefs", { autoLockMs: ms }).catch(() => {
+        /* transient — the next change re-saves; the gate already reflects it */
+      });
+    }, 400);
+  }
+
+  return (
+    <label className="block space-y-2">
+      <span className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium">Lock after inactivity</span>
+        <span className="text-xs tabular-nums text-muted">
+          {LOCK_DELAY_OPTIONS[index].label}
+        </span>
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={last}
+        step={1}
+        value={index}
+        onChange={(e) => change(Number(e.target.value))}
+        aria-label="Lock the app after this much time in the background"
+        className="w-full accent-accent"
+      />
+      <span className="flex justify-between text-[10px] text-muted">
+        {LOCK_DELAY_OPTIONS.map((o) => (
+          <span key={o.ms}>{o.label}</span>
+        ))}
+      </span>
+    </label>
+  );
 }

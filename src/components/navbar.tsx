@@ -409,7 +409,15 @@ function DayControl({ initial }: { initial: ActiveDayState }) {
       title={`Jump back to yesterday to fix its logs. Available until 6 PM, after which ${prevLabel} closes.`}
       className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-surface-2 hover:text-foreground disabled:opacity-50"
     >
-      {busy ? "Loading…" : "← Edit yesterday"}
+      {busy ? (
+        "Loading…"
+      ) : (
+        <>
+          {/* Phones say "Write" since that's the primary action there. */}
+          <span className="sm:hidden">← Yesterday</span>
+          <span className="hidden sm:inline">← Edit yesterday</span>
+        </>
+      )}
     </button>
   );
 }
