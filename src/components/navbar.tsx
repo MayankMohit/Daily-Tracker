@@ -14,6 +14,7 @@ import {
   UserButton,
 } from "@clerk/nextjs";
 import { ThemeToggle } from "./theme-toggle";
+import { NavInstallButton } from "./install-app";
 import { cn } from "@/lib/cn";
 import { useOnline } from "@/lib/use-online";
 import { APP_NAME } from "@/lib/config";
@@ -98,6 +99,9 @@ export function Navbar({
               </Link>
             );
           })}
+          {/* Directly installs the PWA (or shows Add-to-Home-Screen steps on
+              Apple Safari). Only appears when installable and not yet installed. */}
+          <NavInstallButton />
         </nav>
 
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
