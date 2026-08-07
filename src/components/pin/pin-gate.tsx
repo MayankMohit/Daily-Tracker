@@ -22,6 +22,28 @@ import { cn } from "@/lib/cn";
 import { AUTO_LOCK_EVENT, nearestLockDelayMs } from "@/lib/pin-lock";
 
 const UNLOCK_KEY = "pin-unlocked";
+// Offline-authoritative mirror of the server "lock enabled" flag. The enabled
+// state is otherwise only known via the server-rendered `initialEnabled`, which
+// is baked into cached HTML and goes stale (e.g. shows "locked" after the lock
+// was removed). We persist the truth here whenever we're online and trust it
+// when offline. Lives in localStorage (survives tab close), unlike UNLOCK_KEY.
+const ENABLED_KEY = "pin-enabled";
+
+function writeEnabledMirror(on: boolean) {
+  try {
+    localStorage.setItem(ENABLED_KEY, on ? "1" : "0");
+  } catch {
+    /* storage unavailable */
+  }
+}
+function readEnabledMirror(): boolean | null {
+  try {
+    const v = localStorage.getItem(ENABLED_KEY);
+    return v === null ? null : v === "1";
+  } catch {
+    return null;
+  }
+}
 
 function markUnlocked() {
   try {
@@ -58,6 +80,9 @@ export function PinGate({
   // Start matching the SSR value (no hydration mismatch); a mount effect unlocks
   // this tab if it already unlocked this session.
   const [locked, setLocked] = useState(initialEnabled);
+  // Connectivity, for the "offline unavailable while locked" screen. Starts true
+  // (SSR can't know) and syncs on mount.
+  const [online, setOnline] = useState(true);
   // How long the tab can be hidden before we re-lock (a quick tab-switch back
   // within the window won't lock). Seeded from the server-saved pref; the Settings
   // slider broadcasts AUTO_LOCK_EVENT so a change re-arms the timer without a reload.
@@ -87,17 +112,53 @@ export function PinGate({
     if (enabled && isUnlockedThisSession()) setLocked(false);
   }, [enabled]);
 
+  // On mount, reconcile the enabled flag with the freshest known truth. Online:
+  // the SSR value is authoritative, so mirror it for later offline use. Offline:
+  // the cached SSR value can be stale (lock removed after this HTML was cached),
+  // so trust the mirror written the last time we were online — this is what stops
+  // a removed lock from still showing as locked offline.
+  useEffect(() => {
+    if (navigator.onLine) {
+      writeEnabledMirror(initialEnabled);
+    } else {
+      const mirror = readEnabledMirror();
+      if (mirror !== null) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setEnabled(mirror);
+        if (!mirror) setLocked(false);
+      }
+    }
+    setOnline(navigator.onLine);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Track connectivity so the lock + offline case shows a clear "unavailable"
+  // screen rather than a lock screen that can never verify (unlock needs the
+  // server). Reconnecting drops it automatically.
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+
   // Enable/disable happen in Settings; those cards broadcast so this gate (and the
   // navbar button) react without a full reload. Enabling shouldn't lock the user
   // out mid-session, so treat the current tab as unlocked.
   useEffect(() => {
     const onEnabled = () => {
       markUnlocked();
+      writeEnabledMirror(true);
       setEnabled(true);
       setLocked(false);
     };
     const onDisabled = () => {
       clearUnlocked();
+      writeEnabledMirror(false);
       setEnabled(false);
       setLocked(false);
     };
@@ -160,9 +221,31 @@ export function PinGate({
 
   // Signed out (session ended client-side) → never show the screen.
   if (isSignedIn === false) return null;
+  // Lock on + offline: unlocking needs the server, so offline access isn't
+  // possible. Show a clear message instead of an unusable lock screen.
+  if (enabled && !online) return <OfflineUnavailable />;
   if (!enabled || !locked) return null;
 
   return <LockScreen onUnlock={unlock} onReset={resetWithCode} />;
+}
+
+// Shown when the app lock is on but there's no connection — the PIN can only be
+// verified server-side, so offline use is disabled while the lock is enabled.
+function OfflineUnavailable() {
+  return (
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-surface p-6 text-center [--surface-alpha:1]">
+      <div className="max-w-xs space-y-3">
+        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-surface-2 text-2xl">
+          🔒
+        </div>
+        <h1 className="text-lg font-semibold tracking-tight">You&apos;re offline</h1>
+        <p className="text-sm text-muted">
+          Offline access is turned off while App Lock is on — your PIN can only be
+          checked online. Reconnect to the internet to unlock and continue.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 // Reset (forgot PIN) proves ownership with the saved recovery code, then clears

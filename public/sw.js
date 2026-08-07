@@ -12,7 +12,7 @@
  *    IndexedDB outbox); on reconnect a Background Sync nudges the app to replay.
  */
 
-const VERSION = "v2";
+const VERSION = "v3";
 const SHELL_CACHE = `dt-shell-${VERSION}`;
 const ASSET_CACHE = `dt-assets-${VERSION}`;
 const DATA_CACHE = `dt-data-${VERSION}`;
@@ -26,7 +26,15 @@ const SHELL_ASSETS = [
 // Best-effort precache of the main routes so the first *offline* open works even
 // for a page not visited this session. Done per-URL (not addAll) so one failure —
 // e.g. an auth redirect — doesn't abort the whole install.
-const PRECACHE_ROUTES = ["/", "/notes", "/journal", "/history", "/insights"];
+const PRECACHE_ROUTES = [
+  "/",
+  "/notes",
+  "/journal",
+  "/history",
+  "/insights",
+  "/settings",
+  "/planner",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

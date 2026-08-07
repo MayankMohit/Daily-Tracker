@@ -116,7 +116,7 @@ export function TaskRowMenu({
         type="button"
         aria-label="Task options"
         onClick={toggle}
-        className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted opacity-0 transition-opacity hover:bg-surface-2 hover:text-foreground group-hover:opacity-100 aria-expanded:opacity-100"
+        className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted opacity-100 transition-opacity hover:bg-surface-2 hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100 aria-expanded:opacity-100"
         aria-expanded={open}
       >
         ⋯

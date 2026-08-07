@@ -22,6 +22,10 @@ import {
 } from "@/lib/backgrounds";
 
 const STORAGE_KEY = "dt-theme";
+// Mirror of the user's appearance, so it survives offline even when the cached
+// server HTML is stale (or fell back to a default render). Written on every
+// change and read before first paint by themeInitScript.
+const APPEARANCE_KEY = "dt-appearance";
 
 interface ThemeContextValue {
   /** The user's selected preference. */
@@ -84,13 +88,31 @@ function resolve(choice: ThemeChoice): "light" | "dark" {
   return choice;
 }
 
-/** Inline script string that sets data-theme before first paint. */
+/** Inline script string that sets data-theme + appearance before first paint.
+ *  Reading the appearance mirror here (not just the server-rendered attributes)
+ *  means a stale/default cached document still paints the user's real look while
+ *  offline; ThemeProvider re-applies the same values after hydration (no flash). */
 export const themeInitScript = `
 (function () {
   try {
     var c = localStorage.getItem("${STORAGE_KEY}") || "system";
     var dark = c === "dark" || (c === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
     document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  } catch (e) {}
+  try {
+    var a = JSON.parse(localStorage.getItem("${APPEARANCE_KEY}") || "null");
+    if (a && a.palette) {
+      var el = document.documentElement;
+      el.setAttribute("data-palette", a.palette);
+      el.setAttribute("data-accent", a.accent);
+      el.setAttribute("data-corners", a.corners);
+      el.setAttribute("data-density", a.density);
+      if (a.background) {
+        el.style.setProperty("--bg-overlay", String(a.background.overlay));
+        el.style.setProperty("--bg-pattern-size", a.background.patternScale + "px");
+        el.style.setProperty("--surface-alpha", String(a.background.surfaceAlpha));
+      }
+    }
   } catch (e) {}
 })();
 `;
@@ -105,7 +127,45 @@ export function ThemeProvider({
 }) {
   const [choice, setChoiceState] = useState<ThemeChoice>("system");
   const [resolved, setResolved] = useState<"light" | "dark">("light");
-  const [appearance, setAppearanceState] = useState<Appearance>(initialAppearance);
+  // Seed from the localStorage mirror when present so the applied look is the
+  // user's own even if the server HTML was stale/default (offline). SSR falls
+  // back to the server value. Only the settings page consumes this via context,
+  // and it's client-navigated — so there's no initial-render hydration mismatch.
+  const [appearance, setAppearanceState] = useState<Appearance>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(APPEARANCE_KEY);
+        if (saved) return JSON.parse(saved) as Appearance;
+      } catch {
+        /* corrupt/unavailable — fall back to the server value */
+      }
+    }
+    return initialAppearance;
+  });
+
+  // When online, the server-rendered appearance is authoritative (it reflects a
+  // change made on another device). Adopt it and refresh the mirror — but only if
+  // it actually differs, so we don't fire a redundant save on every load.
+  const reconciled = useRef(false);
+  useEffect(() => {
+    if (reconciled.current || !navigator.onLine) return;
+    reconciled.current = true;
+    const fresh = JSON.stringify(initialAppearance);
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(APPEARANCE_KEY);
+    } catch {
+      /* ignore */
+    }
+    if (saved !== fresh) {
+      setAppearanceState(initialAppearance);
+      try {
+        localStorage.setItem(APPEARANCE_KEY, fresh);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [initialAppearance]);
 
   // Read persisted choice on mount.
   useEffect(() => {
@@ -140,6 +200,12 @@ export function ThemeProvider({
   const mounted = useRef(false);
   useEffect(() => {
     applyAppearance(appearance);
+    // Keep the offline mirror current with every change (and the initial value).
+    try {
+      localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance));
+    } catch {
+      /* storage unavailable — non-fatal */
+    }
     if (!mounted.current) {
       mounted.current = true;
       return;

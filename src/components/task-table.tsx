@@ -701,7 +701,7 @@ export function TaskTable({
                     onMouseDown={() => setHandleId(task._id)}
                     onMouseUp={() => setHandleId(null)}
                     onMouseLeave={() => setHandleId((h) => (dragId ? h : null))}
-                    className="-ml-2.5 grid h-6 w-4 shrink-0 cursor-grab touch-none place-items-center text-muted opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 active:cursor-grabbing"
+                    className="-ml-2.5 grid h-6 w-4 shrink-0 cursor-grab touch-none place-items-center text-muted opacity-100 transition-opacity hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100 active:cursor-grabbing"
                   >
                     ⠿
                   </button>
