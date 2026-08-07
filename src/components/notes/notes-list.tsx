@@ -4,16 +4,72 @@
 // note" action, and a modal editor. All mutations update local state optimistically
 // so the list stays snappy without a full server refresh.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Note } from "@/lib/types";
 import { Button, Card, EmptyState } from "@/components/ui";
 import { Modal } from "@/components/modal";
 import { NoteEditor } from "./note-editor";
 import { NoteMarkdown } from "./note-markdown";
+import { outboxAll, OUTBOX_CHANGED, OUTBOX_DRAINED } from "@/lib/offline/outbox";
 
 export function NotesList({ initial }: { initial: Note[] }) {
   const [notes, setNotes] = useState<Note[]>(initial);
   const [editing, setEditing] = useState<Note | "new" | null>(null);
+
+  // Offline resilience: a reload reseeds the list from stale cached server data,
+  // which doesn't include note edits/creates/deletes still queued in the outbox —
+  // so without this, an offline edit appears to revert on refresh. Re-apply the
+  // pending mutations on mount (and when the outbox changes). Once synced the
+  // outbox empties and this is a no-op.
+  useEffect(() => {
+    let cancelled = false;
+    const sync = () => {
+      void outboxAll().then((recs) => {
+        if (cancelled) return;
+        setNotes((cur) => {
+          let list = cur;
+          for (const rec of recs) {
+            const b = (rec.body ?? {}) as { id?: string; taskId?: string; title?: string; body?: string };
+            const stamp = new Date(rec.createdAt).toISOString();
+            const title = b.title?.trim() || undefined;
+            if (rec.kind === "note-upsert" && b.id) {
+              // Edit of an existing note — apply the queued title/body.
+              list = list.map((n) =>
+                n._id === b.id ? { ...n, title, body: b.body ?? n.body, updatedAt: stamp } : n,
+              );
+            } else if (rec.kind === "note-upsert" && rec.tempId && !b.taskId) {
+              // Offline-created standalone note — add it if not already shown.
+              if (!list.some((n) => n._id === rec.tempId)) {
+                list = [
+                  {
+                    _id: rec.tempId,
+                    userId: "local",
+                    title,
+                    body: b.body ?? "",
+                    createdAt: stamp,
+                    updatedAt: stamp,
+                  },
+                  ...list,
+                ];
+              }
+            } else if (rec.kind === "note-delete") {
+              const id = rec.url.split("?")[0].split("/").pop();
+              if (id) list = list.filter((n) => n._id !== id);
+            }
+          }
+          return list;
+        });
+      });
+    };
+    sync();
+    window.addEventListener(OUTBOX_CHANGED, sync);
+    window.addEventListener(OUTBOX_DRAINED, sync);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(OUTBOX_CHANGED, sync);
+      window.removeEventListener(OUTBOX_DRAINED, sync);
+    };
+  }, []);
 
   function upsertLocal(n: Note) {
     setNotes((list) => {

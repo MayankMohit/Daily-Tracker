@@ -14,6 +14,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import type { JournalEntry } from "@/lib/types";
 import { api } from "@/lib/client";
+import { outboxAll } from "@/lib/offline/outbox";
 import { dayKeyToDate, type DayKey } from "@/lib/date";
 import { Card, inputClass, Button } from "./ui";
 import {
@@ -39,6 +40,23 @@ const STARTERS = [
 const MIN_PASSPHRASE = 8;
 
 type Phase = "loading" | "setup" | "locked" | "unlocked";
+
+// The latest journal write still queued in the outbox for a given date (its
+// encrypted cipher/iv), or null. Lets an offline edit survive a reload instead of
+// reverting to the stale server entry. Records are FIFO by id, so the last match
+// is the newest edit.
+async function latestPendingJournal(
+  date: string,
+): Promise<{ cipher: string; iv: string } | null> {
+  const recs = await outboxAll();
+  let found: { cipher: string; iv: string } | null = null;
+  for (const rec of recs) {
+    if (rec.kind !== "journal") continue;
+    const b = (rec.body ?? {}) as { date?: string; cipher?: string; iv?: string };
+    if (b.date === date && b.cipher && b.iv) found = { cipher: b.cipher, iv: b.iv };
+  }
+  return found;
+}
 
 export function JournalBox({
   date,
@@ -68,11 +86,22 @@ export function JournalBox({
   const [changing, setChanging] = useState(false);
   const [changedNote, setChangedNote] = useState<string | null>(null);
 
-  // Decrypt (or read legacy) today's entry into the editor.
+  // Decrypt (or read legacy) today's entry into the editor. An offline edit is
+  // saved as ciphertext in the outbox, so on reload — when the server props are
+  // stale/cached — prefer the latest pending write for this date; otherwise it
+  // would look like the edit reverted. Once synced the outbox empties and the
+  // server entry (now up to date) is used again.
   const loadInitial = useCallback(
     async (dek: CryptoKey) => {
       let value = "";
-      if (initial?.cipher && initial?.iv) {
+      const pending = await latestPendingJournal(date);
+      if (pending) {
+        try {
+          value = await decryptText(dek, pending.cipher, pending.iv);
+        } catch {
+          value = "";
+        }
+      } else if (initial?.cipher && initial?.iv) {
         try {
           value = await decryptText(dek, initial.cipher, initial.iv);
         } catch {
@@ -84,7 +113,7 @@ export function JournalBox({
       setText(value);
       lastSaved.current = value;
     },
-    [initial],
+    [initial, date],
   );
 
   // Re-encrypt any entries still stored as plaintext from before E2E.

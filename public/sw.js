@@ -12,7 +12,7 @@
  *    IndexedDB outbox); on reconnect a Background Sync nudges the app to replay.
  */
 
-const VERSION = "v5";
+const VERSION = "v6";
 const SHELL_CACHE = `dt-shell-${VERSION}`;
 const ASSET_CACHE = `dt-assets-${VERSION}`;
 const DATA_CACHE = `dt-data-${VERSION}`;
@@ -48,11 +48,17 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
-// Fetch + cache each app route's document so the first *offline* open of a page
-// works even if it wasn't visited this session. Per-route best-effort (one
-// failure can't abort the rest); skips redirects so an auth handshake/sign-in
-// response is never cached in place of a real page.
+// Warm the cache for each app route so its first *offline* open works even if it
+// wasn't visited this session. We cache two things per route:
+//   • the HTML document — used when a full navigation falls back offline;
+//   • the full RSC payload — used for client-side (<Link>) navigation. Fetched
+//     WITHOUT the Next-Router-Prefetch header so we get the real page, not the
+//     loading-skeleton a prefetch returns for a dynamic route (that skeleton is
+//     why an unvisited page like the planner could dead-end at the offline page).
+// Per-route best-effort; skips redirects so an auth handshake/sign-in response is
+// never cached in place of a real page.
 async function warmRoutes(cache) {
+  const dataCache = await caches.open(DATA_CACHE);
   await Promise.all(
     PRECACHE_ROUTES.map(async (route) => {
       try {
@@ -60,6 +66,17 @@ async function warmRoutes(cache) {
         if (res.ok && !res.redirected) await cache.put(route, res.clone());
       } catch {
         /* offline right now — the client re-warms once back online */
+      }
+      try {
+        const rsc = await fetch(route, {
+          credentials: "same-origin",
+          headers: { RSC: "1" },
+        });
+        if (rsc.ok && !rsc.redirected) {
+          await dataCache.put(rscKey(new URL(route, self.location.origin)), rsc.clone());
+        }
+      } catch {
+        /* best-effort */
       }
     }),
   );
@@ -117,9 +134,12 @@ function rscKey(url) {
 async function rscNetworkFirst(request, url) {
   const cache = await caches.open(DATA_CACHE);
   const key = rscKey(url);
+  // Don't cache prefetches: for a dynamic route they return only the loading
+  // skeleton, which would clobber the full RSC warmed for offline use.
+  const isPrefetch = request.headers.get("Next-Router-Prefetch") === "1";
   try {
     const res = await fetch(request);
-    if (res.ok) cache.put(key, res.clone());
+    if (res.ok && !isPrefetch) cache.put(key, res.clone());
     return res;
   } catch {
     const cached = await cache.match(key);
@@ -129,6 +149,7 @@ async function rscNetworkFirst(request, url) {
     throw new Error("offline and no rsc cache");
   }
 }
+
 
 async function staleWhileRevalidate(request, cacheName) {
   const cache = await caches.open(cacheName);
