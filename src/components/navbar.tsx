@@ -75,10 +75,13 @@ export function Navbar({
       <div className="flex h-14 w-full items-center px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-2 font-bold tracking-tight text-lg">
           <Image src="/icons/logo.png" alt={APP_NAME} width={40} height={40} className="rounded-md" priority unoptimized />
-          <span className="translate-y-1 text-2xl">{APP_NAME}</span>
+          {/* Brand wordmark stays on Geist regardless of the user's Font setting. */}
+          <span className="translate-y-1 text-2xl [font-family:var(--font-geist-sans),sans-serif]">
+            {APP_NAME}
+          </span>
         </Link>
 
-        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 text-sm md:flex">
+        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 text-sm min-[1440px]:flex">
           {NAV.map((item) => {
             const active =
               item.href === "/"
@@ -106,9 +109,9 @@ export function Navbar({
 
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
           <DayControl initial={activeDay} />
-          {/* Desktop keeps the light/dark toggle inline as before; on mobile it
-              lives in Settings only. */}
-          <span className="hidden md:inline-flex">
+          {/* Desktop keeps the light/dark toggle inline as before; on mobile and
+              tablet it lives in Settings only. */}
+          <span className="hidden min-[1440px]:inline-flex">
             <ThemeToggle />
           </span>
           {isSignedIn && locking && (
@@ -135,17 +138,17 @@ export function Navbar({
             </button>
           )}
 
-          {/* Desktop: profile / auth inline. On mobile these move into the menu.
-              Offline, auth can't be verified, so show an Offline badge instead of
-              sign-in/up controls that wouldn't work. */}
+          {/* Desktop: profile / auth inline. On mobile and tablet these move into
+              the menu. Offline, auth can't be verified, so show an Offline badge
+              instead of sign-in/up controls that wouldn't work. */}
           {isSignedIn ? (
-            <span className="hidden md:inline-flex">
+            <span className="hidden min-[1440px]:inline-flex">
               <UserButton appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
             </span>
           ) : !online ? (
-            <OfflineBadge className="hidden md:inline-flex" />
+            <OfflineBadge className="hidden min-[1440px]:inline-flex" />
           ) : (
-            <div className="hidden items-center gap-2 text-sm md:flex">
+            <div className="hidden items-center gap-2 text-sm min-[1440px]:flex">
               <SignInButton mode="modal">
                 <button className="rounded-md px-3 py-1.5 text-muted hover:bg-surface-2 hover:text-foreground">
                   Sign in
@@ -159,7 +162,7 @@ export function Navbar({
             </div>
           )}
 
-          {/* Mobile-only: hamburger housing the nav links + profile/auth. */}
+          {/* Mobile + tablet: hamburger housing the nav links + profile/auth. */}
           <MobileMenu
             isSignedIn={Boolean(isSignedIn)}
             online={online}
@@ -172,9 +175,10 @@ export function Navbar({
 }
 
 /**
- * Mobile navigation menu (hidden on md+). A hamburger button opens a dropdown
- * holding the same links as the desktop centre nav, plus the profile/auth controls
- * that sit inline on desktop. Theme switching lives in Settings, not here.
+ * Compact navigation menu for mobile + tablet (hidden at ≥1440). A hamburger button
+ * opens a dropdown holding the same links as the desktop centre nav, plus the
+ * profile/auth controls that sit inline on desktop. Theme switching lives in
+ * Settings, not here.
  */
 // Small "Offline" pill shown in place of auth controls when there's no
 // connection (sign-in/up need the network, so they're not offered offline).
@@ -249,7 +253,7 @@ function MobileMenu({
   }, [open]);
 
   return (
-    <div className="relative md:hidden">
+    <div className="relative min-[1440px]:hidden">
       <button
         ref={btnRef}
         type="button"

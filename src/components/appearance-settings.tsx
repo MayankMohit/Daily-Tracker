@@ -29,6 +29,8 @@ import type {
   BackgroundImage,
   CornerChoice,
   DensityChoice,
+  FontChoice,
+  FontSizeChoice,
   PaletteChoice,
 } from "@/lib/types";
 
@@ -85,6 +87,20 @@ const CORNERS: { value: CornerChoice; label: string }[] = [
   { value: "sharp", label: "Sharp" },
   { value: "rounded", label: "Rounded" },
   { value: "round", label: "Round" },
+];
+
+// Each label previews its own typeface so the choice is obvious at a glance.
+const FONTS: { value: FontChoice; label: string; className: string }[] = [
+  { value: "sans", label: "Sans", className: "font-sans" },
+  { value: "serif", label: "Serif", className: "[font-family:var(--font-lora),Georgia,serif]" },
+  { value: "mono", label: "Mono", className: "[font-family:var(--font-geist-mono),monospace]" },
+  { value: "rounded", label: "Rounded", className: "[font-family:var(--font-nunito),system-ui]" },
+];
+
+const FONT_SIZES: { value: FontSizeChoice; label: string }[] = [
+  { value: "sm", label: "Small" },
+  { value: "base", label: "Medium" },
+  { value: "lg", label: "Large" },
 ];
 
 export function AppearanceSettings() {
@@ -461,6 +477,36 @@ export function AppearanceSettings() {
             value={appearance.corners}
             options={CORNERS}
             onChange={(v) => setAppearance({ corners: v })}
+          />
+        </Section>
+      </div>
+
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <Section label="Font">
+          <div className="inline-flex flex-wrap gap-1.5">
+            {FONTS.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => setAppearance({ font: f.value })}
+                className={cn(
+                  "rounded-lg border px-3 py-1.5 text-sm transition-colors",
+                  f.className,
+                  (appearance.font ?? "sans") === f.value
+                    ? "border-foreground bg-surface-2 text-foreground"
+                    : "border-border text-muted hover:text-foreground",
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </Section>
+        <Section label="Text size">
+          <Segmented
+            value={appearance.fontSize ?? "base"}
+            options={FONT_SIZES}
+            onChange={(v) => setAppearance({ fontSize: v })}
           />
         </Section>
       </div>

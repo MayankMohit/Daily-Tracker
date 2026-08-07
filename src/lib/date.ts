@@ -99,6 +99,31 @@ export function weekDays(ref: Date = new Date()): DayKey[] {
   return Array.from({ length: 7 }, (_, i) => toDayKey(addDays(start, i)));
 }
 
+/** Monday day-key of the week containing `key` — a stable id for a week. */
+export function weekStartKey(key: DayKey): DayKey {
+  return toDayKey(startOfWeek(dayKeyToDate(key), { weekStartsOn: 1 }));
+}
+
+/** The 7 day-keys of the week starting at Monday `mondayKey`, oldest first. */
+export function weekDaysFrom(mondayKey: DayKey): DayKey[] {
+  const start = dayKeyToDate(mondayKey);
+  return Array.from({ length: 7 }, (_, i) => toDayKey(addDays(start, i)));
+}
+
+/** Shift a Monday day-key by `n` weeks (negative = earlier). */
+export function shiftWeek(mondayKey: DayKey, n: number): DayKey {
+  return toDayKey(addDays(dayKeyToDate(mondayKey), n * 7));
+}
+
+/** Compact label for a week, e.g. "Aug 4 – 10" or "Jul 28 – Aug 3". */
+export function weekLabel(mondayKey: DayKey): string {
+  const start = dayKeyToDate(mondayKey);
+  const end = addDays(start, 6);
+  return format(start, "MMM") === format(end, "MMM")
+    ? `${format(start, "MMM d")} – ${format(end, "d")}`
+    : `${format(start, "MMM d")} – ${format(end, "MMM d")}`;
+}
+
 export function isToday(key: DayKey): boolean {
   return isSameDay(dayKeyToDate(key), new Date());
 }

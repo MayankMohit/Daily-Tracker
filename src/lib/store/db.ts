@@ -56,11 +56,14 @@ export function defaultUserPrefs(userId = CURRENT_USER_ID): UserPrefs {
     _id: userId,
     userId,
     theme: "system",
+    dashboardRange: "month",
     appearance: {
       palette: "default",
       accent: "mono",
       corners: "rounded",
       density: "comfortable",
+      font: "sans",
+      fontSize: "base",
       background: {
         preset: "none",
         overlay: 0.85,
@@ -107,6 +110,7 @@ export const getUserPrefs = cache(
       ...existing,
       appearance,
       autoLockMs: existing.autoLockMs ?? defaults.autoLockMs,
+      dashboardRange: existing.dashboardRange ?? defaults.dashboardRange,
     };
   },
 );

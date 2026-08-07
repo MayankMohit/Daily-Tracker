@@ -52,6 +52,8 @@ function applyAppearance(a: Appearance) {
   el.setAttribute("data-accent", a.accent);
   el.setAttribute("data-corners", a.corners);
   el.setAttribute("data-density", a.density);
+  el.setAttribute("data-font", a.font ?? "sans");
+  el.setAttribute("data-font-size", a.fontSize ?? "base");
   el.style.setProperty("--bg-overlay", String(a.background.overlay));
   el.style.setProperty("--bg-pattern-size", `${a.background.patternScale}px`);
   el.style.setProperty("--surface-alpha", String(a.background.surfaceAlpha));
@@ -107,6 +109,8 @@ export const themeInitScript = `
       el.setAttribute("data-accent", a.accent);
       el.setAttribute("data-corners", a.corners);
       el.setAttribute("data-density", a.density);
+      el.setAttribute("data-font", a.font || "sans");
+      el.setAttribute("data-font-size", a.fontSize || "base");
       if (a.background) {
         el.style.setProperty("--bg-overlay", String(a.background.overlay));
         el.style.setProperty("--bg-pattern-size", a.background.patternScale + "px");

@@ -180,6 +180,8 @@ export const appearanceInputSchema = z
     ]),
     corners: z.enum(["sharp", "rounded", "round"]),
     density: z.enum(["compact", "comfortable", "cozy"]),
+    font: z.enum(["sans", "serif", "mono", "rounded"]),
+    fontSize: z.enum(["sm", "base", "lg"]),
     background: z.object({
       // A gradient keyword ("none", "aurora", …) or `img:<blob URL>` for an
       // uploaded photo, so allow room for an absolute URL.
@@ -197,6 +199,7 @@ export const appearanceInputSchema = z
 
 export const userPrefsInputSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),
+  dashboardRange: z.enum(["month", "week"]).optional(),
   appearance: appearanceInputSchema.optional(),
   // Auto-lock delay must be one of the fixed stops (see lib/pin-lock).
   autoLockMs: z

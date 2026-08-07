@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Caveat } from "next/font/google";
+import { Geist, Geist_Mono, Caveat, Lora, Nunito } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import "./globals.css";
@@ -43,6 +43,12 @@ const caveat = Caveat({
   variable: "--font-handwriting",
   subsets: ["latin"],
 });
+
+// Optional UI faces for the Font setting. next/font defines the @font-face but
+// the browser only downloads a family once it's actually applied (i.e. selected),
+// so these cost nothing until chosen.
+const lora = Lora({ variable: "--font-lora", subsets: ["latin"] });
+const nunito = Nunito({ variable: "--font-nunito", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   // Resolves every relative URL below (canonical, OG, sitemap-linked images)
@@ -181,10 +187,16 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
+      // Font-family CSS vars live on <html> (not <body>) so the data-font rules,
+      // which resolve them into `--app-font-sans`, can actually see them —
+      // custom properties only inherit downward.
+      className={`${geistSans.variable} ${geistMono.variable} ${caveat.variable} ${lora.variable} ${nunito.variable}`}
       data-palette={appearance.palette}
       data-accent={appearance.accent}
       data-corners={appearance.corners}
       data-density={appearance.density}
+      data-font={appearance.font}
+      data-font-size={appearance.fontSize}
       data-bg={photo ? "photo" : bg.preset}
       style={htmlStyle}
     >
@@ -197,7 +209,7 @@ export default async function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${caveat.variable} min-h-dvh font-sans antialiased`}
+        className="min-h-dvh font-sans antialiased"
       >
         <ClerkProvider
           signInUrl="/sign-in"

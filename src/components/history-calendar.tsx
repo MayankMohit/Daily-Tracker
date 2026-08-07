@@ -145,7 +145,11 @@ export function HistoryCalendar({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+      {/* Side-by-side from tablet up (≥640) so the calendar sits in a fixed-width
+          column next to the day panel instead of stacking as a huge full-width
+          block on top. The calendar column steps up on desktop. Phones (<640)
+          keep the stacked single-column layout. */}
+      <div className="grid gap-6 sm:grid-cols-[minmax(0,280px)_minmax(0,1fr)] lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
         <Card className="space-y-4">
           <CalNav
             label={monthLabel(month)}

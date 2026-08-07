@@ -232,12 +232,26 @@
   --color-danger: var(--danger);
   --color-success: var(--success);
   --color-warning: var(--warning);
-  --font-sans: var(--font-geist-sans);
+  /* `--app-font-sans` lets the Font setting swap the UI typeface; unset = Geist. */
+  --font-sans: var(--app-font-sans, var(--font-geist-sans));
   --font-mono: var(--font-geist-mono);
 }
 
 html {
   color-scheme: light dark;
+}
+
+/* ── Font family ──────────────────────────────────────────────────────────────
+   The Font setting sets `data-font` on <html>; each maps to a stack via
+   `--app-font-sans`, which the `font-sans` utility (the body's face) resolves. */
+html[data-font="serif"] {
+  --app-font-sans: var(--font-lora), Georgia, "Times New Roman", serif;
+}
+html[data-font="mono"] {
+  --app-font-sans: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+}
+html[data-font="rounded"] {
+  --app-font-sans: var(--font-nunito), ui-rounded, "Segoe UI", system-ui, sans-serif;
 }
 
 body {
@@ -267,13 +281,20 @@ body {
   --radius-3xl: 1.75rem;
 }
 
-/* ── Density ──────────────────────────────────────────────────────────────────
-   A single safe global lever: the root rem. All Tailwind spacing/text is
-   rem-based, so this scales the whole UI proportionally. `comfortable` = default
-   browser 16px (no rule). */
+/* ── Density & text size ──────────────────────────────────────────────────────
+   The root rem is a single safe global lever — all Tailwind spacing/text is
+   rem-based, so scaling it rescales the whole UI proportionally. Density picks
+   the base rem; the Text-size setting multiplies it, so the two compose. */
 
-html[data-density="compact"] { font-size: 15px; }
-html[data-density="cozy"] { font-size: 17px; }
+html {
+  --ui-base: 16px; /* comfortable */
+  --font-scale: 1; /* base */
+  font-size: calc(var(--ui-base) * var(--font-scale));
+}
+html[data-density="compact"] { --ui-base: 15px; }
+html[data-density="cozy"] { --ui-base: 17px; }
+html[data-font-size="sm"] { --font-scale: 0.9375; }
+html[data-font-size="lg"] { --font-scale: 1.0625; }
 
 /* ── Background scenery ───────────────────────────────────────────────────────
    Two fixed, behind-everything layers: a pattern (`::before`) and a theme-

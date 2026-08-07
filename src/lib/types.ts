@@ -291,12 +291,22 @@ export type AccentChoice =
   | "yellow";
 export type CornerChoice = "sharp" | "rounded" | "round";
 export type DensityChoice = "compact" | "comfortable" | "cozy";
+/** UI font family. `sans` is the default (Geist). */
+export type FontChoice = "sans" | "serif" | "mono" | "rounded";
+/** Overall text size, layered on top of density's root-rem scale. */
+export type FontSizeChoice = "sm" | "base" | "lg";
+/** Dashboard task-log + graphs window: a whole calendar month or a single week. */
+export type DashboardRange = "month" | "week";
 
 export interface Appearance {
   palette: PaletteChoice;
   accent: AccentChoice;
   corners: CornerChoice;
   density: DensityChoice;
+  /** UI font family (applied as `data-font` on <html>). */
+  font: FontChoice;
+  /** Text size, applied as `data-font-size` on <html>. */
+  fontSize: FontSizeChoice;
   /** Background scenery. `preset` "none" = solid theme background; `overlay` is
    *  0..1, how strongly the theme colour scrims over the pattern (readability);
    *  `patternScale` is the repeating-tile size in px (smaller = denser), used
@@ -316,6 +326,9 @@ export interface UserPrefs {
   userId: string;
   theme: ThemeChoice;
   appearance: Appearance;
+  /** Dashboard task-log table + graphs window. A desktop-only control toggles it;
+   *  mobile always collapses the table to today regardless of this. */
+  dashboardRange: DashboardRange;
   /** App-lock auto-lock delay in ms — how long the tab can be hidden before the
    *  PIN gate re-locks. One of the fixed stops in `lib/pin-lock`. */
   autoLockMs: number;

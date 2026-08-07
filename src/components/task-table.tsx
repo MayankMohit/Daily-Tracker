@@ -27,20 +27,34 @@ import { MonthlyTrendChart, type TrendPoint } from "./charts/monthly-trend-chart
 import { MoodTrendChart, type MoodTrendPoint } from "./charts/mood-trend-chart";
 import { MoodInsight, type MoodInsightData } from "./mood-insight";
 
-// True on narrow (phone) viewports — below Tailwind's `sm` breakpoint (640px).
-// Drives the table's collapse to a single today column and the charts' reflow to
-// full width. Starts `false` so the first client render matches the server (no
-// hydration mismatch), then syncs after mount and on viewport changes.
-function useIsMobile(): boolean {
-  const [mobile, setMobile] = useState(false);
+// Viewport tier, driving the dashboard's responsive layout:
+//   • mobile  (< 640px)        — table collapses to a single today column; the
+//                                charts reflow to full-width even-spread cards.
+//   • tablet  (640–1439px)     — the full month grid is too wide (this covers
+//                                iPad Pro at 1024px too), so the table + charts
+//                                collapse to a clean 7-day week window (the "week
+//                                only" format), full-width, regardless of the
+//                                saved month/week pref.
+//   • desktop (≥ 1440px)       — full grid; honours the saved pref, and week mode
+//                                gets the narrowed ~64% shell + wide Task column.
+// Both flags start `false` (= desktop) so the first client render matches the
+// server-rendered desktop layout (no hydration mismatch), then sync after mount.
+function useViewport(): { isMobile: boolean; isTablet: boolean } {
+  const [v, setV] = useState({ isMobile: false, isTablet: false });
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 639px)");
-    const update = () => setMobile(mq.matches);
+    const mqMobile = window.matchMedia("(max-width: 639px)");
+    const mqTablet = window.matchMedia("(min-width: 640px) and (max-width: 1439px)");
+    const update = () =>
+      setV({ isMobile: mqMobile.matches, isTablet: mqTablet.matches });
     update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
+    mqMobile.addEventListener("change", update);
+    mqTablet.addEventListener("change", update);
+    return () => {
+      mqMobile.removeEventListener("change", update);
+      mqTablet.removeEventListener("change", update);
+    };
   }, []);
-  return mobile;
+  return v;
 }
 
 export function TaskTable({
@@ -53,7 +67,8 @@ export function TaskTable({
   noteCounts: initialNoteCounts = {},
   categories: categoryList = [],
   today,
-  monthNav,
+  weekView = false,
+  periodNav,
 }: {
   tasks: Task[];
   dates: DayKey[];
@@ -68,8 +83,13 @@ export function TaskTable({
   noteCounts?: Record<string, number>;
   categories?: string[];
   today?: DayKey;
-  /** Month pager, rendered inline in the "Task" header cell. */
-  monthNav?: ReactNode;
+  /** Week window (7 columns) vs the default month. Widens the Task column and
+   *  drops the wide grid min-width so the table sits comfortably in the narrower
+   *  ~70% page shell the dashboard uses in week mode. */
+  weekView?: boolean;
+  /** Period pager (month or week) + range toggle, rendered inline in the "Task"
+   *  header cell. Desktop-only (the header hides it on mobile). */
+  periodNav?: ReactNode;
 }) {
   const router = useRouter();
   // Server re-render (after create/edit/delete/reorder) runs inside a transition
@@ -89,12 +109,38 @@ export function TaskTable({
   // today's editable column; the whole-month history still lives in the charts
   // below (which reflow to full width). Desktop is untouched (`columnDates` ===
   // `dates`). Past-month views (no `today`) keep every column and scroll.
-  const isMobile = useIsMobile();
+  const { isMobile, isTablet } = useViewport();
   // Collapse to a single column only when there *is* a today to show (current
   // month). Past-month mobile views keep the full scrolling grid + aligned
   // charts, since there's no single day to focus.
   const collapsed = isMobile && Boolean(today);
-  const columnDates = collapsed ? dates.filter((d) => d === today) : dates;
+  // The days actually rendered — columns *and* charts. On tablet we always show a
+  // 7-day window (the current week ending at today, or the last 7 days of the
+  // range) so the dashboard stays clean regardless of the month/week pref; on
+  // mobile/desktop it's the full fetched range. Days shown are always a subset of
+  // the fetched `dates`, so their logs/moods/extras are already loaded.
+  const viewDates = useMemo(() => {
+    if (!isTablet || dates.length <= 7) return dates;
+    const anchor = today ? dates.indexOf(today) : dates.length - 1;
+    const end = anchor >= 0 ? anchor : dates.length - 1;
+    const start = Math.min(Math.max(0, end - 6), Math.max(0, dates.length - 7));
+    return dates.slice(start, start + 7);
+  }, [dates, today, isTablet]);
+  const columnDates = collapsed
+    ? viewDates.filter((d) => d === today)
+    : viewDates;
+  // Tablet forces the compact week format even when the saved pref is "month".
+  const compactWeek = weekView || isTablet;
+  // Grid sizing by window: the month view spreads ~31 columns and needs a wide
+  // min-width to stay readable (it scrolls within its card); the week format has
+  // only 7 columns, so it fills the available width with a wider Task column and a
+  // much smaller floor. The Task/today widths step up only on wide desktop
+  // (≥1440) where the week view sits in a narrower ~64% shell; on tablet / iPad Pro
+  // they stay tighter to fit full width. Both the table and the aligned charts
+  // share `gridMinW`.
+  const gridMinW = compactWeek ? "min-w-[640px]" : "min-w-[1000px]";
+  const taskColW = compactWeek ? "w-[280px] min-[1440px]:w-[440px]" : "w-[280px]";
+  const todayColW = compactWeek ? "w-[92px] min-[1440px]:w-[112px]" : "w-[80px]";
   // Distinct existing category names, offered as suggestions in the edit form.
   const categories = useMemo(
     () =>
@@ -468,8 +514,8 @@ export function TaskTable({
         const padR = 12;
         const plotLeft = padL;
         const plotRight = Math.max(padL + 1, w - padR);
-        const n = dates.length;
-        const mCenters = dates.map((_, i) =>
+        const n = viewDates.length;
+        const mCenters = viewDates.map((_, i) =>
           n <= 1
             ? (plotLeft + plotRight) / 2
             : plotLeft + (i / (n - 1)) * (plotRight - plotLeft),
@@ -487,7 +533,7 @@ export function TaskTable({
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [order, dates, collapsed]);
+  }, [order, viewDates, collapsed]);
 
   const commit = useCallback(
     async (
@@ -567,7 +613,7 @@ export function TaskTable({
   // to 0%.
   const trendPoints = useMemo<TrendPoint[]>(
     () =>
-      dates.map((d, i) => {
+      viewDates.map((d, i) => {
         const future = today ? d > today : false;
         const applicable = future
           ? []
@@ -607,20 +653,20 @@ export function TaskTable({
           detail,
         };
       }),
-    [dates, order, logs, today, activeGeom, extrasByDate],
+    [viewDates, order, logs, today, activeGeom, extrasByDate],
   );
 
   // Mood plotted on the same column grid as the completion trend.
   const moodTrendPoints = useMemo<MoodTrendPoint[]>(
     () =>
-      dates.map((d, i) => ({
+      viewDates.map((d, i) => ({
         x: activeGeom?.centers[i] ?? 0,
         mood: moods.get(d) ?? null,
         label: monthDayLabel(d),
         weekday: weekdayLabel(d),
         isToday: today ? d === today : false,
       })),
-    [dates, moods, activeGeom, today],
+    [viewDates, moods, activeGeom, today],
   );
 
   // Pair each day's mood with its completion to read the mood↔productivity link.
@@ -628,10 +674,10 @@ export function TaskTable({
   // with live edits.
   const moodInsight = useMemo<MoodInsightData>(() => {
     const completionByDate = new Map<DayKey, number | null>();
-    trendPoints.forEach((p, i) => completionByDate.set(dates[i], p.value));
+    trendPoints.forEach((p, i) => completionByDate.set(viewDates[i], p.value));
 
     const pairs: { mood: number; rate: number }[] = [];
-    for (const d of dates) {
+    for (const d of viewDates) {
       const mood = moods.get(d);
       const val = completionByDate.get(d);
       if (mood === undefined || val === null || val === undefined) continue;
@@ -655,7 +701,7 @@ export function TaskTable({
       ),
       pairedDays: pairs.length,
     };
-  }, [dates, moods, trendPoints, today]);
+  }, [viewDates, moods, trendPoints, today]);
 
   if (tasks.length === 0) return null;
 
@@ -680,13 +726,13 @@ export function TaskTable({
         ref={tableRef}
         className={cn(
           "w-full table-fixed border-collapse text-sm",
-          !collapsed && "min-w-[1000px]",
+          !collapsed && gridMinW,
         )}
       >
         <colgroup>
           {/* Collapsed (mobile, today-only): pin Est. + today narrow and leave the
               Task column unsized so it absorbs all the leftover width. */}
-          <col className={collapsed ? undefined : "w-[280px]"} />
+          <col className={collapsed ? undefined : taskColW} />
           <col className={collapsed ? "w-[36px]" : "w-[52px]"} />
           {columnDates.map((d) => (
             <col
@@ -695,7 +741,7 @@ export function TaskTable({
                 collapsed
                   ? "w-[72px]"
                   : isCurrentDay(d)
-                    ? "w-[80px]"
+                    ? todayColW
                     : undefined
               }
             />
@@ -706,8 +752,9 @@ export function TaskTable({
             <th className="sticky left-0 z-20 border-r border-border bg-surface px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted">
               <div className="flex items-center justify-between gap-2">
                 <span>Task</span>
-                {/* Month pager is desktop-only; hidden on mobile. */}
-                {!isMobile && monthNav}
+                {/* Period pager + range toggle are desktop-only; hidden on mobile
+                    and tablet (tablet always shows the fixed 7-day week window). */}
+                {!isMobile && !isTablet && periodNav}
               </div>
             </th>
             <th
@@ -1026,7 +1073,7 @@ export function TaskTable({
           mobile the table only shows today, so these move out to full-width cards
           below (see the `collapsed` block after the card). */}
       {!collapsed && chartGeom && chartGeom.width > 0 && (
-        <div className="min-w-[1000px] border-t border-border">
+        <div className={cn(gridMinW, "border-t border-border")}>
           <div className="px-4 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
             Daily completion
           </div>
@@ -1039,7 +1086,7 @@ export function TaskTable({
         </div>
       )}
       {!collapsed && chartGeom && chartGeom.width > 0 && (
-        <div className="min-w-[1000px] border-t border-border">
+        <div className={cn(gridMinW, "border-t border-border")}>
           <div className="px-4 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
             Mood
           </div>
